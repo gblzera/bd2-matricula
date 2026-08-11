@@ -1,0 +1,53 @@
+# =====================================================================
+# Ambiente do ALUNO — Banco de Dados II (CCO072) — IESB 2026/2
+# Prof. Rodrigo Gonçalves
+#
+# PostgreSQL 17 + pgAdmin, com o banco "matricula" VAZIO.
+# Você constrói o esquema você mesmo, a partir do Modelo Lógico
+# entregue no enunciado do projeto (o DDL é o Marco 1).
+#
+# COMO USAR
+#   docker compose up -d       (sobe os serviços)
+#   docker compose down        (desliga; seus dados ficam salvos)
+#   docker compose down -v     (desliga e APAGA tudo — recomeça do zero)
+#
+# ACESSOS
+#   Banco   -> localhost:5432   usuário: bd2   senha: bd2   base: matricula
+#   pgAdmin -> http://localhost:8080   login: admin@iesb.br   senha: admin
+#
+# A base "matricula" já existe, mas está vazia. Conecte-se por pgAdmin
+# ou DBeaver e comece a criar suas tabelas.
+# =====================================================================
+services:
+  postgres:
+    image: postgres:17
+    container_name: bd2_aluno_postgres
+    environment:
+      POSTGRES_USER: bd2
+      POSTGRES_PASSWORD: bd2
+      POSTGRES_DB: matricula
+    ports:
+      - "5432:5432"
+    volumes:
+      - bd2_aluno_dados:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bd2 -d matricula"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: bd2_aluno_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@iesb.br
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "8080:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  bd2_aluno_dados:
