@@ -33,17 +33,29 @@ ou simplesmente rodar `./scripts/run_all.sh` de novo: **todos os scripts são id
 ```
 sql/
   01_ddl.sql                  Marco 1 · tipos, domínios, tabelas e restrições
-  02_carga.sql                Marco 1 · carga determinística (120 alunos, 34 turmas, ~700 matrículas)
+  02_carga.sql                Marco 1 · carga determinística (120 alunos, 34 turmas, ~800 matrículas)
   03_consultas.sql            Marco 1 · 10 consultas comentadas (recursivas, janelas, ranges)
+  04_views.sql                Marco 2 · 3 views + materialized view (política de refresh justificada)
+  05_volume_legado.sql        Marco 2 · semestres 2020–2024 (~33 mil matrículas) p/ evidências
+  06_indices.sql              Marco 2 · 4 índices (parcial, BRIN, B-tree, GIN bônus) + EXPLAIN
+  07_transacoes.sql           Marco 2 · funções de matrícula (anomalia + correção por lock)
+  08_seguranca.sql            Marco 2 · papéis, GRANT/REVOKE e RLS (com demo)
   90_testes_restricoes.sql    Testes: dados inválidos sendo rejeitados pelas correções
 docs/
   correcoes-modelo-logico.md  Análise crítica: erros do modelo lógico e correções aplicadas
-  plano-marco2.md             Plano de ataque do Marco 2
-  evidencias/                 Evidências de EXPLAIN (Marco 2)
+  backup-restore.md           Procedimento de backup/restauração + simulação de desastre
+  plano-marco2.md             Plano de ataque do Marco 2 (histórico)
+  evidencias/
+    explain-indices.md        EXPLAIN (ANALYZE, BUFFERS) antes/depois de cada índice
+    transacoes-demo.md        Anomalia da última vaga + 2 correções (execuções reais)
+    rls-demo.md               RLS em ação: aluno não vê histórico alheio
 ambiente/
   docker-compose.yml          Cópia do ambiente oficial da disciplina
 scripts/
-  run_all.sh                  Executa todos os scripts SQL na ordem
+  run_all.sh                  Reconstrói o banco inteiro na ordem (01→08 + testes)
+  demo_concorrencia.sh        Disputa da última vaga: sem_protecao | lock | serializable
+  backup.sh / restore.sh      Backup pg_dump -Fc e restauração ensaiada
+  concorrencia/               Roteiros das sessões (READ COMMITTED e SERIALIZABLE)
 AUTORES.md                    Frentes de responsabilidade de cada integrante
 ```
 
@@ -70,5 +82,15 @@ dados inválidos.
 | Marco | Data | Conteúdo | Status |
 |---|---|---|---|
 | Marco 1 | 14/09/2026 | DDL + carga + 10 consultas | ✅ neste repositório |
-| Marco 2 | 06/11/2026 | views, índices, transações, segurança, backup | 🔜 [plano](docs/plano-marco2.md) |
-| Apresentação | 09/11 ou 16/11 | demonstração ao vivo + arguição cruzada | — |
+| Marco 2 | 06/11/2026 | views, índices, transações, segurança, backup | ✅ neste repositório |
+| Apresentação | 09/11 ou 16/11 | demonstração ao vivo + arguição cruzada | roteiros prontos em `docs/evidencias/` |
+
+## Demonstrações rápidas (roteiro da apresentação)
+
+```bash
+./scripts/demo_concorrencia.sh sem_protecao   # a ANOMALIA: overbooking 9/8
+./scripts/demo_concorrencia.sh lock           # correção A: FOR UPDATE (8/8)
+./scripts/demo_concorrencia.sh serializable   # correção B: SSI aborta com 40001 (8/8)
+./scripts/backup.sh                           # backup -Fc
+docker exec -i bd2_aluno_postgres psql -U bd2 -d matricula < sql/06_indices.sql   # EXPLAIN antes/depois ao vivo
+```

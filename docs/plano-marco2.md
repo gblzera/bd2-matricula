@@ -1,8 +1,12 @@
 # Plano de ataque — Marco 2 (entrega 06/11/2026)
 
-> Entregar **antes** da primeira data de apresentação (09/11). Compõe os 4,0
-> pontos de artefato da A2. Este plano mapeia cada exigência do enunciado para
-> uma abordagem concreta e o arquivo onde vai viver.
+> **STATUS: IMPLEMENTADO.** Este documento foi o plano; a implementação vive em
+> `sql/04..08`, `scripts/` e `docs/evidencias/`. Diferenças em relação ao plano
+> original: (a) entrou o `05_volume_legado.sql` — sem volume, EXPLAIN não mostra
+> ganho mensurável; (b) os índices escolhidos mudaram para parcial + BRIN +
+> B-tree + GIN (o `matricula(aluno_id)` planejado já era coberto pela UNIQUE da
+> correção C2 — análise em `docs/evidencias/explain-indices.md`); (c) o bônus
+> confirmado foi JSONB+GIN. Mantido como registro do processo.
 
 ## 1. Views — `sql/04_views.sql`
 
