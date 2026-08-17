@@ -43,6 +43,7 @@ sql/
   90_testes_restricoes.sql    Testes: dados inválidos sendo rejeitados pelas correções
 docs/
   correcoes-modelo-logico.md  Análise crítica: erros do modelo lógico e correções aplicadas
+  estado-do-projeto.md        Handoff: resumo, decisões (com justificativa) e pendências — LER PRIMEIRO
   modelo-fisico.html          Página visual: diagrama ER, catálogo das tabelas e correções antes/depois
   backup-restore.md           Procedimento de backup/restauração + simulação de desastre
   plano-marco2.md             Plano de ataque do Marco 2 (histórico)
