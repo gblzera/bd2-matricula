@@ -43,6 +43,7 @@ sql/
   90_testes_restricoes.sql    Testes: dados inválidos sendo rejeitados pelas correções
 docs/
   correcoes-modelo-logico.md  Análise crítica: erros do modelo lógico e correções aplicadas
+  modelo-fisico.html          Página visual: diagrama ER, catálogo das tabelas e correções antes/depois
   backup-restore.md           Procedimento de backup/restauração + simulação de desastre
   plano-marco2.md             Plano de ataque do Marco 2 (histórico)
   evidencias/
@@ -76,6 +77,10 @@ Destaques:
 Cada correção aparece no [sql/01_ddl.sql](sql/01_ddl.sql) marcada com `[C#]`, e o
 [sql/90_testes_restricoes.sql](sql/90_testes_restricoes.sql) **prova** cada uma rejeitando
 dados inválidos.
+
+Para estudar visualmente, abra [docs/modelo-fisico.html](docs/modelo-fisico.html) no navegador
+(`open docs/modelo-fisico.html`): diagrama ER com cardinalidades, catálogo das 16 tabelas com
+chaves, e as 13 correções lado a lado (antes → depois).
 
 ## Marcos
 
