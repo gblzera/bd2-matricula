@@ -13,7 +13,7 @@ de trocar os lados: para uma FK de T -> P,
 Notação (mín, máx) de Elmasri: o par fica junto da ENTIDADE que ele restringe
 e diz quantas vezes CADA instância dela participa do relacionamento.
 
-Uso:  python3 scripts/gerar_modelo_logico.py <banco> <schema> <saida.drawio>
+Uso:  python3 scripts/gerar_modelo_logico.py <banco> <schema> <saida.drawio> "<título da página>"
 """
 import html, io, sys, subprocess, collections
 
