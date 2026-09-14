@@ -314,7 +314,7 @@ Detalhes da implementação que valem menção na arguição:
   apontando para o schema certo. Se tivesse ficado em `public`, o RLS quebraria
   em silêncio.
 
-### C14 · Nomenclatura de chaves — pendente
+### C14 · Nomenclatura de chaves — APLICADA
 
 PK `id_<tabela>` e FK com o mesmo nome da PK referenciada
 (`curso.id_campus → campus.id_campus`), habilitando `JOIN ... USING (id_campus)`.
@@ -322,7 +322,9 @@ PK `id_<tabela>` e FK com o mesmo nome da PK referenciada
 O modelo do professor usa `id` + `<tabela>_id`, que é uma convenção **coerente**
 — não um erro. Nossa mudança é **padronização deliberada**, justificada por nome
 autoexplicativo em consultas com muitas junções e pela possibilidade do `USING`.
-Ainda **não executada**.
+**Executada na ampliação do modelo**: todas as 41 tabelas do `sql/01_ddl.sql`
+seguem a convenção, e carga, consultas, views, índices, transações, segurança e
+testes foram escritos sobre ela.
 
 ---
 
