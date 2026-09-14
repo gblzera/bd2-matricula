@@ -29,7 +29,7 @@
   - aba 1: shell (scripts)
   - aba 2: `docker exec -it bd2_aluno_postgres psql -U bd2 -d matricula` (DBA)
   - aba 3: `docker exec -it bd2_aluno_postgres psql -U al_20250094 -d matricula` (aluno — RLS)
-- [ ] `docs/modelo-tabelas.png` aberto (diagrama para apontar durante a fala).
+- [ ] `docs/modelo-tabelas-p1.svg` aberto no navegador (diagrama vetorial — zoom sem perder nitidez).
 
 ---
 
@@ -42,7 +42,7 @@ professor, corrigimos o que era erro real — documentado item a item — e ampl
 para 41 tabelas normalizadas: pessoa/endereço, aulas, presenças e notas por
 avaliação. A base tem ~33 mil matrículas e 60 mil notas incluindo o legado
 2020–2024. Tudo que vocês vão ver reconstrói do zero com um script só."*
-Apontar o diagrama (`modelo-tabelas.png`) por 10 segundos, não mais.
+Apontar o diagrama (`modelo-tabelas-p1.svg`) por 10 segundos, não mais.
 
 ### 0:45–2:15 · Restrições de integridade funcionando  ✅ exigido
 
