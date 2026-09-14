@@ -406,11 +406,11 @@ CREATE TABLE enrollment_window (
   academic_term_id           smallint    NOT NULL REFERENCES academic_term (academic_term_id),
   description varchar(60) NOT NULL,
   window_range    tstzrange   NOT NULL CHECK (NOT isempty(window_range)),
-  tipo_periodo_matricula      enrollment_window_type NOT NULL,
+  window_type      enrollment_window_type NOT NULL,
   -- [E9] janelas do mesmo kind não se sobrepõem no período; tipos diferentes
   -- podem (ajuste cobre o ends da matrícula). ENUM em GiST: btree_gist, validado.
   CONSTRAINT ex_term_enrollment_window EXCLUDE USING gist
-    (academic_term_id WITH =, tipo_periodo_matricula WITH =, window_range WITH &&)
+    (academic_term_id WITH =, window_type WITH =, window_range WITH &&)
 );
 COMMENT ON TABLE enrollment_window IS 'QUANDO se pode matricular [E9]; a função de matrícula consulta now() <@ janela.';
 

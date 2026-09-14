@@ -494,7 +494,7 @@ INSERT INTO academic_term (year, semester, start_date, end_date) VALUES
 -- [E9] janelas de matrícula: o EXCLUDE gist impede duas janelas do MESMO kind
 -- se sobreporem no mesmo período. Tipos diferentes PODEM conviver — e convivem:
 -- o ajuste começa antes de a matrícula terminar, de propósito.
-INSERT INTO enrollment_window (academic_term_id, description, window_range, tipo_periodo_matricula)
+INSERT INTO enrollment_window (academic_term_id, description, window_range, window_type)
 SELECT pl.academic_term_id, v.description,
        tstzrange(
          (pl.start_date + v.starts)::timestamptz,

@@ -97,7 +97,8 @@ COLUNA = {
  'semestre_periodo_letivo':'semester','data_inicio_periodo_letivo':'start_date',
  'data_fim_periodo_letivo':'end_date',
  'id_periodo_matricula':'enrollment_window_id','descricao_periodo_matricula':'description',
- 'janela_periodo_matricula':'window_range',   # `window` é palavra RESERVADA no SQL'tipo_periodo_matricula':'window_type',
+ 'janela_periodo_matricula':'window_range',   # `window` é palavra RESERVADA no SQL
+ 'tipo_periodo_matricula':'window_type',
  'id_feriado':'holiday_id','descricao_feriado':'description',
  'data_feriado':'holiday_date','facultativo_feriado':'is_optional',
  'id_turma':'section_id','codigo_turma':'code','vagas_turma':'seats',
