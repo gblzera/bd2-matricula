@@ -239,6 +239,16 @@
   .kind-chip.integ { background: var(--uk-soft); color: var(--uk); border-color: color-mix(in srgb, var(--uk) 40%, transparent); }
   .kind-chip.omiss { background: var(--gen-soft); color: var(--gen); border-color: color-mix(in srgb, var(--gen) 40%, transparent); }
   .kind-chip.decis { background: var(--fk-soft); color: var(--fk); border-color: color-mix(in srgb, var(--fk) 40%, transparent); }
+  .kind-chip.conf { background: var(--ok-soft); color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, transparent); }
+  .kind-chip.desemp { background: var(--gen-soft); color: var(--gen); border-color: color-mix(in srgb, var(--gen) 40%, transparent); }
+  .method { background: var(--surface-2); border: 1px solid var(--line); border-left: 4px solid var(--ok); border-radius: 10px; padding: 16px 18px; margin: 0 0 22px; }
+  .method h3 { font-size: 0.95rem; margin: 0 0 8px; }
+  .method p { margin: 0 0 8px; font-size: 0.9rem; }
+  .method p:last-child { margin-bottom: 0; }
+  table.conf { border-collapse: collapse; width: 100%; font-size: 0.85rem; margin-top: 12px; }
+  table.conf th { text-align: left; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  table.conf td { padding: 7px 10px; border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent); vertical-align: top; }
+  table.conf tr:last-child td { border-bottom: 0; }
   .fix .where { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
   .fix .where code { color: var(--ink); }
   .fix .why { margin-top: 10px; }
@@ -272,13 +282,14 @@
   <div class="wrap">
     <div class="eyebrow">IESB · Banco de Dados II (CCO072) · 2026/2 · Sistema de Matrícula Acadêmica</div>
     <h1 style="margin-top:8px">Modelo Físico — bd2-matricula</h1>
-    <p class="lead">O modelo lógico entregue no enunciado, traduzido para PostgreSQL 17 e <strong>corrigido</strong>. Esta página mostra as tabelas com suas chaves, os relacionamentos com cardinalidade, e cada correção no formato <em>antes (modelo lógico) → depois (modelo físico)</em>. Fonte da verdade: <code>sql/01_ddl.sql</code>.</p>
+    <p class="lead">O modelo de partida do professor (<code>docs/banco_de_dados_matricula_com_erros.sql</code>), implementado em PostgreSQL 17 e <strong>corrigido onde há erro real</strong>. Esta página mostra as tabelas com suas chaves, os relacionamentos com cardinalidade, e cada achado no formato <em>antes (modelo de partida) → depois (modelo físico)</em>. Toda afirmação sobre o modelo de partida foi <strong>verificada por execução</strong> — ver a metodologia na seção de achados. Fonte da verdade: <code>sql/01_ddl.sql</code>.</p>
     <div class="stats">
       <div class="stat"><div class="n">16</div><div class="l">tabelas</div></div>
       <div class="stat"><div class="n">17</div><div class="l">relacionamentos</div></div>
       <div class="stat"><div class="n">3</div><div class="l">N:N resolvidos</div></div>
       <div class="stat"><div class="n">1</div><div class="l">relação 1:1</div></div>
-      <div class="stat"><div class="n">13</div><div class="l">correções ao modelo</div></div>
+      <div class="stat"><div class="n">7</div><div class="l">erros reais corrigidos</div></div>
+      <div class="stat"><div class="n">6</div><div class="l">restrições conferidas e OK</div></div>
     </div>
     <div class="legend">
       <span>Legenda das colunas:</span>
@@ -287,7 +298,7 @@
       <span><span class="b uk">U</span> único</span>
       <span><span class="b gen">GEN</span> coluna gerada</span>
       <span><span class="b opt">null</span> aceita nulo (o resto é <code>NOT NULL</code>)</span>
-      <span><a class="cmark" href="#c1">C#</a> correção aplicada ali</span>
+      <span><a class="cmark" href="#conferidos">C#</a> correção aplicada ali</span>
     </div>
   </div>
 </header>
@@ -297,7 +308,7 @@
     <a href="#diagrama">Diagrama ER</a>
     <a href="#relacionamentos">Relacionamentos</a>
     <a href="#tabelas">Tabelas</a>
-    <a href="#correcoes">Correções (13)</a>
+    <a href="#correcoes">Achados</a>
     <a href="#mantido">O que não mudamos</a>
   </div>
 </nav>
@@ -457,20 +468,20 @@ erDiagram
         </thead>
         <tbody>
           <tr><td class="mono">campus</td><td><span class="card-pill">1 : N</span></td><td class="mono">curso</td><td class="mono">curso.campus_id</td><td>RESTRICT</td><td>curso obrigatoriamente tem campus</td></tr>
-          <tr><td class="mono">campus</td><td><span class="card-pill">1 : N</span></td><td class="mono">sala</td><td class="mono">sala.campus_id</td><td>RESTRICT</td><td>código de sala é único <em>por campus</em> <a class="cmark" href="#c4">C4</a></td></tr>
+          <tr><td class="mono">campus</td><td><span class="card-pill">1 : N</span></td><td class="mono">sala</td><td class="mono">sala.campus_id</td><td>RESTRICT</td><td>código de sala é único <em>por campus</em> <a class="cmark" href="#conferidos">C4</a></td></tr>
           <tr><td class="mono">campus</td><td><span class="card-pill">0..1 : N</span></td><td class="mono">feriado</td><td class="mono">feriado.campus_id <span class="b opt">null</span></td><td>CASCADE</td><td>NULL = feriado nacional <a class="cmark" href="#c9">C9</a></td></tr>
-          <tr><td class="mono">curso</td><td><span class="card-pill">1 : N</span></td><td class="mono">curriculo</td><td class="mono">curriculo.curso_id</td><td>RESTRICT</td><td>uma matriz por (curso, ano) <a class="cmark" href="#c8">C8</a></td></tr>
+          <tr><td class="mono">curso</td><td><span class="card-pill">1 : N</span></td><td class="mono">curriculo</td><td class="mono">curriculo.curso_id</td><td>RESTRICT</td><td>uma matriz por (curso, ano) <a class="cmark" href="#conferidos">C8</a></td></tr>
           <tr><td class="mono">curso</td><td><span class="card-pill">1 : N</span></td><td class="mono">aluno</td><td class="mono">aluno.curso_id</td><td>RESTRICT</td><td rowspan="2">as duas FKs de <code>aluno</code> viraram <strong>uma FK composta</strong> <code>(curriculo_id, curso_id)</code> — o currículo é obrigatoriamente do curso do aluno <a class="cmark" href="#c6">C6</a></td></tr>
           <tr><td class="mono">curriculo</td><td><span class="card-pill">1 : N</span></td><td class="mono">aluno</td><td class="mono">aluno.curriculo_id</td><td>RESTRICT</td></tr>
           <tr><td class="mono">curriculo</td><td><span class="card-pill nn">N : N</span></td><td class="mono">disciplina</td><td class="mono">curriculo_disciplina (PK composta)</td><td>CASCADE do lado currículo</td><td>grade: período sugerido e tipo (obrigatória/optativa/eletiva)</td></tr>
-          <tr><td class="mono">disciplina</td><td><span class="card-pill nn">N : N</span></td><td class="mono">disciplina</td><td class="mono">pre_requisito (PK composta)</td><td>CASCADE (ambos)</td><td><strong>auto-relacionamento</strong>; proibido A→A <a class="cmark" href="#c7">C7</a></td></tr>
+          <tr><td class="mono">disciplina</td><td><span class="card-pill nn">N : N</span></td><td class="mono">disciplina</td><td class="mono">pre_requisito (PK composta)</td><td>CASCADE (ambos)</td><td><strong>auto-relacionamento</strong>; proibido A→A <a class="cmark" href="#conferidos">C7</a></td></tr>
           <tr><td class="mono">disciplina</td><td><span class="card-pill">1 : N</span></td><td class="mono">turma</td><td class="mono">turma.disciplina_id</td><td>RESTRICT</td><td></td></tr>
           <tr><td class="mono">periodo_letivo</td><td><span class="card-pill">1 : N</span></td><td class="mono">turma</td><td class="mono">turma.periodo_letivo_id</td><td>RESTRICT</td><td>código de turma único <em>por período</em> <a class="cmark" href="#c5">C5</a></td></tr>
           <tr><td class="mono">professor</td><td><span class="card-pill">1 : N</span></td><td class="mono">turma</td><td class="mono">turma.professor_id</td><td>RESTRICT</td><td></td></tr>
           <tr><td class="mono">turma</td><td><span class="card-pill">1 : N</span></td><td class="mono">turma_horario</td><td class="mono">(turma_id, periodo_letivo_id) → turma(id, periodo_letivo_id)</td><td>CASCADE</td><td rowspan="2">FK composta amarra a denormalização de <code>periodo_letivo_id</code>; sobre ela vale o <code>EXCLUDE gist</code> contra choque de sala <a class="cmark" href="#c10">C10</a></td></tr>
           <tr><td class="mono">periodo_letivo</td><td><span class="card-pill">1 : N</span></td><td class="mono">turma_horario</td><td class="mono">turma_horario.periodo_letivo_id</td><td>—</td></tr>
           <tr><td class="mono">sala</td><td><span class="card-pill">1 : N</span></td><td class="mono">turma_horario</td><td class="mono">turma_horario.sala_id</td><td>RESTRICT</td><td></td></tr>
-          <tr><td class="mono">aluno</td><td><span class="card-pill nn">N : N</span></td><td class="mono">turma</td><td class="mono">matricula (entidade associativa com atributos)</td><td>RESTRICT</td><td>par (aluno, turma) único <a class="cmark" href="#c2">C2</a>; <code>status</code> e <code>data_matricula</code> são atributos do relacionamento</td></tr>
+          <tr><td class="mono">aluno</td><td><span class="card-pill nn">N : N</span></td><td class="mono">turma</td><td class="mono">matricula (entidade associativa com atributos)</td><td>RESTRICT</td><td>par (aluno, turma) único <a class="cmark" href="#conferidos">C2</a>; <code>status</code> e <code>data_matricula</code> são atributos do relacionamento</td></tr>
           <tr><td class="mono">matricula</td><td><span class="card-pill one">1 : 1</span></td><td class="mono">historico</td><td class="mono">historico.matricula_id <span class="b uk">U</span></td><td>CASCADE</td><td>a UNIQUE na FK é o que faz o 1:1; histórico é extensão da matrícula</td></tr>
           <tr><td class="mono">matricula</td><td><span class="card-pill">1 : N</span> <span class="muted">(lógico)</span></td><td class="mono">log_matricula</td><td class="mono">log_matricula.matricula_id <span class="b opt">null</span></td><td>—</td><td><strong>sem FK de propósito</strong>: auditoria sobrevive à remoção da origem <a class="cmark" href="#c11">C11</a></td></tr>
         </tbody>
@@ -516,7 +527,7 @@ erDiagram
           <tr><td class="n">ano_vigencia</td><td class="t">smallint</td><td class="k"></td></tr>
           <tr><td class="n">ativo</td><td class="t">boolean = true</td><td class="k"></td></tr>
         </table>
-        <div class="cons">Restrições<ul><li><code>UNIQUE (curso_id, ano_vigencia)</code> <a class="cmark" href="#c8">C8</a></li><li><code>UNIQUE (id, curso_id)</code> — alvo da FK composta de aluno <a class="cmark" href="#c6">C6</a></li><li><code>CHECK ano_vigencia BETWEEN 1990 AND 2100</code></li></ul></div>
+        <div class="cons">Restrições<ul><li><code>UNIQUE (curso_id, ano_vigencia)</code> <a class="cmark" href="#conferidos">C8</a></li><li><code>UNIQUE (id, curso_id)</code> — alvo da FK composta de aluno <a class="cmark" href="#c6">C6</a></li><li><code>CHECK ano_vigencia BETWEEN 1990 AND 2100</code></li></ul></div>
       </article>
 
       <article class="tcard">
@@ -540,7 +551,7 @@ erDiagram
           <tr><td class="n">requisito_id</td><td class="t">integer → disciplina</td><td class="k"><span class="b pk">PK</span><span class="b fk">FK</span></td></tr>
           <tr><td class="n">vinculo</td><td class="t">vinculo_t = pre_requisito</td><td class="k"><a class="cmark" href="#c12">C12</a></td></tr>
         </table>
-        <div class="cons">Restrições<ul><li><code>CHECK disciplina_id &lt;&gt; requisito_id</code> <a class="cmark" href="#c7">C7</a></li><li>ambas FKs <code>ON DELETE CASCADE</code></li></ul></div>
+        <div class="cons">Restrições<ul><li><code>CHECK disciplina_id &lt;&gt; requisito_id</code> <a class="cmark" href="#conferidos">C7</a></li><li>ambas FKs <code>ON DELETE CASCADE</code></li></ul></div>
       </article>
 
       <article class="tcard">
@@ -575,7 +586,7 @@ erDiagram
           <tr><td class="n">data_inicio</td><td class="t">date</td><td class="k"></td></tr>
           <tr><td class="n">data_fim</td><td class="t">date</td><td class="k"></td></tr>
         </table>
-        <div class="cons">Restrições<ul><li><code>UNIQUE (ano, semestre)</code> <a class="cmark" href="#c3">C3</a></li><li><code>CHECK semestre IN (1, 2)</code> · <code>CHECK data_inicio &lt; data_fim</code> <a class="cmark" href="#c3">C3</a></li></ul></div>
+        <div class="cons">Restrições<ul><li><code>UNIQUE (ano, semestre)</code> <a class="cmark" href="#conferidos">C3</a></li><li><code>CHECK semestre IN (1, 2)</code> · <code>CHECK data_inicio &lt; data_fim</code> <a class="cmark" href="#conferidos">C3</a></li></ul></div>
       </article>
 
       <article class="tcard">
@@ -587,7 +598,7 @@ erDiagram
           <tr><td class="n">capacidade</td><td class="t">smallint</td><td class="k"></td></tr>
           <tr><td class="n">tipo</td><td class="t">tipo_sala_t = teorica</td><td class="k"><a class="cmark" href="#c12">C12</a></td></tr>
         </table>
-        <div class="cons">Restrições<ul><li><code>UNIQUE (campus_id, codigo)</code> <a class="cmark" href="#c4">C4</a></li><li><code>CHECK capacidade &gt; 0</code></li></ul></div>
+        <div class="cons">Restrições<ul><li><code>UNIQUE (campus_id, codigo)</code> <a class="cmark" href="#conferidos">C4</a></li><li><code>CHECK capacidade &gt; 0</code></li></ul></div>
       </article>
 
       <article class="tcard">
@@ -612,7 +623,7 @@ erDiagram
           <tr><td class="n">periodo_letivo_id</td><td class="t">smallint → turma (composta)</td><td class="k"><span class="b fk">FK</span> <a class="cmark" href="#c10">C10</a></td></tr>
           <tr><td class="n">sala_id</td><td class="t">integer → sala</td><td class="k"><span class="b fk">FK</span></td></tr>
           <tr><td class="n">dia_semana</td><td class="t">smallint (1=seg … 7=dom)</td><td class="k"></td></tr>
-          <tr><td class="n">faixa</td><td class="t">timerange</td><td class="k"><a class="cmark" href="#c1">C1</a></td></tr>
+          <tr><td class="n">faixa</td><td class="t">timerange</td><td class="k"><a class="cmark" href="#conferidos">C1</a></td></tr>
         </table>
         <div class="cons">Restrições<ul><li><code>FK (turma_id, periodo_letivo_id) → turma (id, periodo_letivo_id) ON DELETE CASCADE</code> <a class="cmark" href="#c10">C10</a></li><li><code>EXCLUDE USING gist (periodo_letivo_id =, sala_id =, dia_semana =, faixa &amp;&amp;)</code> <a class="cmark" href="#c10">C10</a></li><li><code>EXCLUDE USING gist (turma_id =, dia_semana =, faixa &amp;&amp;)</code></li><li><code>CHECK dia_semana BETWEEN 1 AND 7</code> · <code>CHECK NOT isempty(faixa)</code></li></ul></div>
       </article>
@@ -643,7 +654,7 @@ erDiagram
           <tr><td class="n">data_matricula</td><td class="t">timestamptz = now()</td><td class="k"></td></tr>
           <tr><td class="n">status</td><td class="t">status_mat_t = confirmada</td><td class="k"><a class="cmark" href="#c12">C12</a></td></tr>
         </table>
-        <div class="cons">Restrições<ul><li><code>UNIQUE (aluno_id, turma_id)</code> <a class="cmark" href="#c2">C2</a></li><li>vaga só é consumida por <code>status = 'confirmada'</code> (regra da transação, Marco 2)</li></ul></div>
+        <div class="cons">Restrições<ul><li><code>UNIQUE (aluno_id, turma_id)</code> <a class="cmark" href="#conferidos">C2</a></li><li>vaga só é consumida por <code>status = 'confirmada'</code> (regra da transação, Marco 2)</li></ul></div>
       </article>
 
       <article class="tcard">
@@ -693,161 +704,112 @@ erDiagram
 <!-- ============================================================ CORREÇÕES -->
 <section class="block" id="correcoes">
   <div class="wrap">
-    <h2>As 13 correções — antes e depois</h2>
-    <p class="intro">Para cada item: o que o modelo lógico dizia (traduzido literalmente para DDL), o que o banco aceitaria de errado, e o que ficou no modelo físico. Linhas <span style="color:var(--accent);font-weight:600">vermelhas</span> são o problema; <span style="color:var(--ok);font-weight:600">verdes</span> são o que entrou. Fonte: <code>docs/correcoes-modelo-logico.md</code>.</p>
+    <h2>Achados — o que verificamos, o que corrigimos</h2>
+    <p class="intro">Para cada item: o que o modelo de partida realmente tem, o que o banco aceitaria de errado, e o que ficou no modelo físico. Linhas <span style="color:var(--accent);font-weight:600">vermelhas</span> são o problema; <span style="color:var(--ok);font-weight:600">verdes</span> são o que entrou. Fonte: <code>docs/correcoes-modelo-logico.md</code>.</p>
+
+    <div class="method">
+      <h3>Metodologia — por que confiamos nestas afirmações</h3>
+      <p>Esta análise é medida contra <code>docs/banco_de_dados_matricula_com_erros.sql</code>, o arquivo de partida do professor, e <strong>não contra o diagrama</strong> do modelo lógico. A diferença é material: o diagrama não expressa <code>CHECK</code>, <code>EXCLUDE</code> nem colunas geradas, e uma leitura só do diagrama sugere ausências que o SQL não tem.</p>
+      <p>O procedimento foi executável: o arquivo foi carregado num banco descartável em PostgreSQL 17, o catálogo (<code>pg_constraint</code>, <code>information_schema</code>) foi inspecionado para listar o que de fato existe, e cada suposto defeito foi <strong>testado por inserção</strong> — se o banco aceitou o dado inválido, o defeito é real; se rejeitou, não é.</p>
+      <p><strong>Resultado de partida:</strong> o DDL do professor roda limpo, sem um único erro, e já traz a maior parte das restrições de integridade básicas. Os defeitos reais são mais sutis que ausência de <code>UNIQUE</code> — e são os que interessam.</p>
+    </div>
+
     <div class="legend" style="margin:0 0 18px">
-      <span class="kind-chip fatal">fatal</span><span>o DDL nem roda</span>
-      <span class="kind-chip integ">integridade</span><span>o banco aceita dado inválido</span>
+      <span class="kind-chip fatal">concorrência</span><span>correto sozinho, quebra sob acesso simultâneo</span>
+      <span class="kind-chip integ">integridade</span><span>o banco aceita (ou recusa) dado errado</span>
+      <span class="kind-chip desemp">desempenho</span><span>custo sem contrapartida</span>
       <span class="kind-chip omiss">omissão</span><span>o modelo indica mas não define</span>
       <span class="kind-chip decis">decisão</span><span>escolha de projeto documentada</span>
+      <span class="kind-chip conf">conferido</span><span>verificado e correto — nada a corrigir</span>
     </div>
 
     <div class="fixes">
 
-      <!-- C1 -->
-      <article class="fix" id="c1">
-        <div class="head"><span class="code">C1</span><h3>O tipo <code>timerange</code> não existe no PostgreSQL</h3><span class="kind-chip fatal">fatal</span></div>
-        <div class="where">Tabela <code>turma_horario</code> · coluna <code>faixa</code></div>
-        <p class="why"><strong>Consequência:</strong> o PostgreSQL tem <code>tsrange</code>, <code>daterange</code>, <code>int4range</code>… mas nenhum range de <code>time</code>. Um <code>CREATE TABLE</code> literal do modelo morre com <code>type "timerange" does not exist</code> — nada depois disso é criado.</p>
+      <article class="fix" id="c15">
+        <div class="head"><span class="code">C15</span><h3>Tudo em <code>public</code> em vez de um schema próprio</h3><span class="kind-chip decis">decisão</span></div>
+        <div class="where">Correção <strong>nossa</strong>, não do modelo · <code>sql/01_ddl.sql</code></div>
+        <p class="why"><strong>Consequência:</strong> os <em>dois</em> arquivos do professor abrem com <code>SET search_path TO academico, public</code>. Nossa versão anterior fazia <code>DROP SCHEMA public CASCADE</code> — o que, além de divergir do ponto de partida, derruba junto extensões e quaisquer objetos de terceiros instalados no schema padrão do banco.</p>
         <div class="cmp">
-          <div class="side before"><div class="lbl">Antes · modelo lógico</div>
-<pre><code>CREATE TABLE turma_horario (
-  ...
-<del>  faixa timerange</del>
-);
-<span class="cm">-- ERROR: type "timerange" does not exist</span></code></pre></div>
+          <div class="side before"><div class="lbl">Antes · nosso DDL</div>
+<pre><code><del>DROP SCHEMA IF EXISTS public CASCADE;</del>
+<del>CREATE SCHEMA public;</del>
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+<span class="cm">-- reset com alcance sobre o schema padrão do banco</span>
+<span class="cm">-- e desalinhado do material de aula</span></code></pre></div>
+          <div class="side after"><div class="lbl">Depois</div>
+<pre><code><ins>DROP SCHEMA IF EXISTS academico CASCADE;</ins>
+<ins>CREATE SCHEMA academico;</ins>
+<ins>SET search_path TO academico, public;</ins>
+
+<span class="cm">-- extensão em schema estável: `academico` é</span>
+<span class="cm">-- derrubado a cada execução e a levaria junto</span>
+CREATE EXTENSION IF NOT EXISTS btree_gist <ins>SCHEMA public</ins>;
+
+<span class="cm">-- sessões novas já nascem no caminho certo</span>
+<ins>ALTER DATABASE matricula
+  SET search_path TO academico, public;</ins></code></pre></div>
+        </div>
+        <div class="proof">Schema estável para infraestrutura, schema próprio para os dados. A função <code>aluno_id_de()</code>, que é <code>SECURITY DEFINER</code>, teve o <code>SET search_path</code> migrado junto — se tivesse ficado apontando para <code>public</code>, o RLS quebraria em silêncio.</div>
+      </article>
+
+      <article class="fix" id="anomalia">
+        <div class="head"><span class="code">E1</span><h3>O trigger <code>fn_valida_vaga()</code> não protege a última vaga</h3><span class="kind-chip fatal">concorrência</span></div>
+        <div class="where">Modelo de partida · linhas 194–218</div>
+        <p class="why"><strong>Consequência:</strong> <em>check-then-act</em> clássico. Entre o <code>count(*)</code> e a gravação não há nada que impeça outra sessão de fazer o mesmo. Em Read Committed — o isolamento padrão — duas sessões leem a mesma contagem, ambas passam no <code>IF</code>, e a turma fecha com mais matrículas do que vagas. Um trigger <code>BEFORE INSERT</code> <strong>não é mecanismo de exclusão mútua</strong>: ele dá a aparência de proteção, o que é pior do que não ter proteção nenhuma.</p>
+        <div class="cmp">
+          <div class="side before"><div class="lbl">Antes · modelo de partida</div>
+<pre><code>CREATE FUNCTION fn_valida_vaga() RETURNS trigger AS $$
+  SELECT vagas INTO v_vagas FROM turma
+   WHERE id = NEW.turma_id;
+<del>  SELECT count(*) INTO v_ocupadas FROM matricula</del>
+<del>   WHERE turma_id = NEW.turma_id ...;</del>
+<del>  IF v_ocupadas &gt;= v_vagas THEN RAISE EXCEPTION ...</del>
+$$;
+<span class="cm">-- 2 sessões, 1 vaga -&gt; ambas passam -&gt; 9/8</span></code></pre></div>
+          <div class="side after"><div class="lbl">Depois · duas correções</div>
+<pre><code><span class="cm">-- A (adotada): bloqueio explícito</span>
+<ins>SELECT vagas INTO v_vagas FROM turma</ins>
+<ins> WHERE id = p_turma FOR UPDATE;</ins>
+
+<span class="cm">-- B (documentada): nível de isolamento</span>
+<ins>BEGIN ISOLATION LEVEL SERIALIZABLE;</ins>
+<span class="cm">-- SSI aborta uma com SQLSTATE 40001</span>
+<span class="cm">-- e a aplicação retenta</span></code></pre></div>
+        </div>
+        <div class="proof">É o erro mais importante do modelo — e é deliberado: o enunciado pede exatamente que a anomalia seja reproduzida e corrigida de dois modos. Implementação em <code>sql/07_transacoes.sql</code>; execução real em duas sessões capturada em <code>docs/evidencias/transacoes-demo.md</code>.</div>
+      </article>
+
+      <article class="fix" id="c10">
+        <div class="head"><span class="code">C10</span><h3>A restrição de exclusão de sala é <em>forte demais</em>, não fraca</h3><span class="kind-chip integ">integridade</span></div>
+        <div class="where">Tabela <code>turma_horario</code> · modelo de partida, linhas 138–140</div>
+        <p class="why"><strong>O modelo já protege contra choque de sala</strong> — mas a restrição não inclui o <strong>período letivo</strong>. Consequência: uma sala ocupada na segunda das 08:15 às 11:00 em 2026/2 fica bloqueada naquele horário <em>para sempre</em>, em todos os semestres seguintes. O modelo não falha em impedir o choque; ele impede reuso legítimo.</p>
+        <div class="cmp">
+          <div class="side before"><div class="lbl">Antes · modelo de partida</div>
+<pre><code>ALTER TABLE turma_horario ADD CONSTRAINT ex_sala_ocupada
+  EXCLUDE USING gist (
+    sala_id    WITH =,
+    dia_semana WITH =,
+    faixa      WITH &amp;&amp;
+<del>    -- falta o período letivo</del>
+  );
+<span class="cm">-- JB1, segunda 08:15 em 2026/1 é REJEITADA</span>
+<span class="cm">-- porque 2026/2 já usa o mesmo horário</span></code></pre></div>
           <div class="side after"><div class="lbl">Depois · modelo físico</div>
-<pre><code><ins>CREATE TYPE timerange AS RANGE (subtype = time);</ins>
-
-CREATE TABLE turma_horario (
-  ...
-  faixa timerange NOT NULL
-<ins>    CHECK (NOT isempty(faixa))</ins>
-);</code></pre></div>
+<pre><code>ALTER TABLE turma_horario ADD CONSTRAINT ex_sala_sem_choque
+  EXCLUDE USING gist (
+<ins>    periodo_letivo_id WITH =,</ins>
+    sala_id    WITH =,
+    dia_semana WITH =,
+    faixa      WITH &amp;&amp;
+  );
+<ins>-- denormalização controlada: o período entra em</ins>
+<ins>-- turma_horario amarrado por FK composta</ins>
+<ins>FOREIGN KEY (turma_id, periodo_letivo_id)</ins>
+<ins>  REFERENCES turma (id, periodo_letivo_id)</ins></code></pre></div>
         </div>
-        <div class="proof">Bônus: um range criado assim já ganha o operador <code>&amp;&amp;</code> (sobreposição) e suporte a índice GiST — é o que viabiliza a correção <a class="cmark" href="#c10">C10</a>.</div>
+        <div class="proof">Verificado por inserção: horário idêntico em turma de outro período letivo é rejeitado com <code>conflicting key value violates exclusion constraint "ex_sala_ocupada"</code>. A denormalização viola a 3FN de propósito — e o risco que a 3FN previne (a cópia divergir) é fechado pela FK composta. Acrescentamos ainda <code>EXCLUDE (turma_id, dia_semana, faixa)</code>: a própria turma não pode ter dois horários sobrepostos.</div>
       </article>
 
-      <!-- C2 -->
-      <article class="fix" id="c2">
-        <div class="head"><span class="code">C2</span><h3><code>matricula</code> sem unicidade de (aluno, turma)</h3><span class="kind-chip integ">integridade</span></div>
-        <div class="where">Tabela <code>matricula</code></div>
-        <p class="why"><strong>Consequência:</strong> o mesmo aluno se matricula duas vezes na mesma turma — duas linhas, ids diferentes, ambas válidas. Contagem de vagas, histórico e relatórios ficam corrompidos.</p>
-        <div class="cmp">
-          <div class="side before"><div class="lbl">Antes</div>
-<pre><code>CREATE TABLE matricula (
-  id integer PRIMARY KEY,
-  aluno_id integer REFERENCES aluno,
-  turma_id integer REFERENCES turma,
-  data_matricula timestamptz,
-  status status_mat_t
-);
-<del>-- (aluno 7, turma 3) pode entrar N vezes</del></code></pre></div>
-          <div class="side after"><div class="lbl">Depois</div>
-<pre><code>CREATE TABLE matricula (
-  id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  aluno_id integer NOT NULL REFERENCES aluno (id),
-  turma_id integer NOT NULL REFERENCES turma (id),
-  data_matricula timestamptz NOT NULL DEFAULT now(),
-  status status_mat_t NOT NULL DEFAULT 'confirmada',
-<ins>  CONSTRAINT uq_matricula_aluno_turma
-    UNIQUE (aluno_id, turma_id)</ins>
-);</code></pre></div>
-        </div>
-        <div class="proof">Prova: <code>90_testes_restricoes.sql</code> → <em>OK [C2] matrícula duplicada rejeitada (unique_violation)</em>. Efeito colateral útil: a UNIQUE já indexa <code>aluno_id</code> (coluna líder), dispensando um índice extra no Marco 2.</div>
-      </article>
-
-      <!-- C3 -->
-      <article class="fix" id="c3">
-        <div class="head"><span class="code">C3</span><h3><code>periodo_letivo</code> sem unicidade de (ano, semestre)</h3><span class="kind-chip integ">integridade</span></div>
-        <div class="where">Tabela <code>periodo_letivo</code></div>
-        <p class="why"><strong>Consequência:</strong> dois registros "2026/2" — toda a oferta do semestre poderia se dividir entre períodos duplicados. Também nada impedia semestre 3 ou período que termina antes de começar.</p>
-        <div class="cmp">
-          <div class="side before"><div class="lbl">Antes</div>
-<pre><code>CREATE TABLE periodo_letivo (
-  id smallint PRIMARY KEY,
-  ano smallint,
-  semestre smallint,
-  data_inicio date,
-  data_fim date
-);
-<del>-- (2026, 2) duas vezes? aceita. semestre = 7? aceita.</del></code></pre></div>
-          <div class="side after"><div class="lbl">Depois</div>
-<pre><code>CREATE TABLE periodo_letivo (
-  id smallint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  ano smallint NOT NULL,
-<ins>  semestre smallint NOT NULL CHECK (semestre IN (1, 2)),</ins>
-  data_inicio date NOT NULL,
-  data_fim date NOT NULL,
-<ins>  CONSTRAINT uq_periodo_ano_semestre UNIQUE (ano, semestre),
-  CONSTRAINT ck_periodo_datas CHECK (data_inicio &lt; data_fim)</ins>
-);</code></pre></div>
-        </div>
-        <div class="proof">Prova: <em>OK [C3] período 2026/2 duplicado rejeitado (unique_violation)</em>.</div>
-      </article>
-
-      <!-- C4 -->
-      <article class="fix" id="c4">
-        <div class="head"><span class="code">C4</span><h3><code>sala</code> sem unicidade de código por campus</h3><span class="kind-chip integ">integridade</span></div>
-        <div class="where">Tabela <code>sala</code></div>
-        <p class="why"><strong>Consequência:</strong> duas salas "T101" no mesmo campus. O código só faz sentido único <em>dentro</em> de um campus — campi diferentes podem (e na carga, repetem) o mesmo código, então a unicidade tem de ser composta, não em <code>codigo</code> sozinho.</p>
-        <div class="cmp">
-          <div class="side before"><div class="lbl">Antes</div>
-<pre><code>CREATE TABLE sala (
-  id integer PRIMARY KEY,
-  campus_id smallint REFERENCES campus,
-  codigo varchar(10),
-  capacidade smallint,
-  tipo tipo_sala_t
-);
-<del>-- 'T101' duas vezes no Asa Sul? aceita.</del></code></pre></div>
-          <div class="side after"><div class="lbl">Depois</div>
-<pre><code>CREATE TABLE sala (
-  id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  campus_id smallint NOT NULL REFERENCES campus (id),
-  codigo varchar(10) NOT NULL,
-  capacidade smallint NOT NULL CHECK (capacidade &gt; 0),
-  tipo tipo_sala_t NOT NULL DEFAULT 'teorica',
-<ins>  CONSTRAINT uq_sala_campus_codigo UNIQUE (campus_id, codigo)</ins>
-);</code></pre></div>
-        </div>
-      </article>
-
-      <!-- C5 -->
-      <article class="fix" id="c5">
-        <div class="head"><span class="code">C5</span><h3><code>turma</code> sem unicidade de código por período letivo</h3><span class="kind-chip integ">integridade</span></div>
-        <div class="where">Tabela <code>turma</code></div>
-        <p class="why"><strong>Consequência:</strong> duas turmas "BD2-N1" no mesmo semestre. O código se repete legitimamente entre semestres (a cada nova oferta), mas nunca dentro do mesmo período — de novo, unicidade composta.</p>
-        <div class="cmp">
-          <div class="side before"><div class="lbl">Antes</div>
-<pre><code>CREATE TABLE turma (
-  id integer PRIMARY KEY,
-  codigo varchar(15),
-  disciplina_id integer REFERENCES disciplina,
-  periodo_letivo_id smallint REFERENCES periodo_letivo,
-  professor_id integer REFERENCES professor,
-  turno turno_t,
-  vagas smallint
-);
-<del>-- 'BD2-N1' duas vezes em 2026/2? aceita. vagas = -5? aceita.</del></code></pre></div>
-          <div class="side after"><div class="lbl">Depois</div>
-<pre><code>CREATE TABLE turma (
-  id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  codigo varchar(15) NOT NULL,
-  disciplina_id integer NOT NULL REFERENCES disciplina (id),
-  periodo_letivo_id smallint NOT NULL REFERENCES periodo_letivo (id),
-  professor_id integer NOT NULL REFERENCES professor (id),
-  turno turno_t NOT NULL,
-<ins>  vagas smallint NOT NULL CHECK (vagas &gt;= 0),
-  CONSTRAINT uq_turma_periodo_codigo
-    UNIQUE (periodo_letivo_id, codigo),
-  CONSTRAINT uq_turma_id_periodo
-    UNIQUE (id, periodo_letivo_id)          -- alvo da FK de C10</ins>
-);</code></pre></div>
-        </div>
-      </article>
-
-      <!-- C6 -->
       <article class="fix" id="c6">
         <div class="head"><span class="code">C6</span><h3><code>aluno</code> com <code>curso_id</code> e <code>curriculo_id</code> soltos — currículo de outro curso</h3><span class="kind-chip integ">integridade</span></div>
         <div class="where">Tabela <code>aluno</code> (+ <code>UNIQUE (id, curso_id)</code> em <code>curriculo</code>)</div>
@@ -902,180 +864,95 @@ CREATE TABLE turma_horario (
         <div class="proof">Prova: <em>OK [C6] currículo de outro curso rejeitado (foreign_key_violation composta)</em>. Mantivemos as duas colunas do modelo — a correção é amarrá-las, não remover uma.</div>
       </article>
 
-      <!-- C7 -->
-      <article class="fix" id="c7">
-        <div class="head"><span class="code">C7</span><h3><code>pre_requisito</code> permite disciplina ser pré-requisito de si mesma</h3><span class="kind-chip integ">integridade</span></div>
-        <div class="where">Tabela <code>pre_requisito</code></div>
-        <p class="why"><strong>Consequência:</strong> a linha (BD2, BD2) é aceita e nenhum aluno consegue cursar BD2 nunca. <strong>Limite honesto:</strong> ciclos maiores (A→B→A) não são expressáveis em constraint declarativa — a consulta recursiva 5 tem proteção de ciclo e serve de auditoria; trigger é candidata futura.</p>
-        <div class="cmp">
-          <div class="side before"><div class="lbl">Antes</div>
-<pre><code>CREATE TABLE pre_requisito (
-  disciplina_id integer REFERENCES disciplina,
-  requisito_id integer REFERENCES disciplina,
-  vinculo vinculo_t,
-  PRIMARY KEY (disciplina_id, requisito_id)
-);
-<del>-- (BD2, BD2)? aceita.</del></code></pre></div>
-          <div class="side after"><div class="lbl">Depois</div>
-<pre><code>CREATE TABLE pre_requisito (
-  disciplina_id integer NOT NULL
-    REFERENCES disciplina (id) ON DELETE CASCADE,
-  requisito_id  integer NOT NULL
-    REFERENCES disciplina (id) ON DELETE CASCADE,
-  vinculo vinculo_t NOT NULL DEFAULT 'pre_requisito',
-  PRIMARY KEY (disciplina_id, requisito_id),
-<ins>  CONSTRAINT ck_prereq_nao_reflexivo
-    CHECK (disciplina_id &lt;&gt; requisito_id)</ins>
-);</code></pre></div>
-        </div>
-        <div class="proof">Prova: <em>OK [C7] pré-requisito reflexivo rejeitado (check_violation)</em>.</div>
-      </article>
-
-      <!-- C8 -->
-      <article class="fix" id="c8">
-        <div class="head"><span class="code">C8</span><h3><code>curriculo</code> sem unicidade de (curso, ano de vigência)</h3><span class="kind-chip integ">integridade</span></div>
-        <div class="where">Tabela <code>curriculo</code></div>
-        <p class="why"><strong>Consequência:</strong> dois "currículo 2026 de CC" distintos, e o aluno pode cair em qualquer um.</p>
-        <div class="cmp">
-          <div class="side before"><div class="lbl">Antes</div>
-<pre><code>CREATE TABLE curriculo (
-  id integer PRIMARY KEY,
-  curso_id smallint REFERENCES curso,
-  ano_vigencia smallint,
-  ativo boolean
-);
-<del>-- (CC, 2026) duas vezes? aceita.</del></code></pre></div>
-          <div class="side after"><div class="lbl">Depois</div>
-<pre><code>CREATE TABLE curriculo (
-  id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  curso_id smallint NOT NULL REFERENCES curso (id),
-  ano_vigencia smallint NOT NULL
-    CHECK (ano_vigencia BETWEEN 1990 AND 2100),
-  ativo boolean NOT NULL DEFAULT true,
-<ins>  CONSTRAINT uq_curriculo_curso_ano UNIQUE (curso_id, ano_vigencia),</ins>
-  CONSTRAINT uq_curriculo_id_curso  UNIQUE (id, curso_id)   <span class="cm">-- C6</span>
-);</code></pre></div>
-        </div>
-      </article>
-
-      <!-- C9 -->
       <article class="fix" id="c9">
-        <div class="head"><span class="code">C9</span><h3><code>feriado</code> sem unicidade e sem semântica para campus NULL</h3><span class="kind-chip integ">integridade</span></div>
-        <div class="where">Tabela <code>feriado</code></div>
-        <p class="why"><strong>Consequência:</strong> o mesmo feriado cadastrado N vezes. Definimos: <strong>NULL = feriado nacional</strong>. Detalhe técnico que pega muita gente: em <code>UNIQUE</code> comum, NULLs não conflitam entre si — dois "7 de setembro" nacionais passariam. O PostgreSQL 15+ resolve com <code>NULLS NOT DISTINCT</code>.</p>
+        <div class="head"><span class="code">C9</span><h3><code>feriado</code>: a unicidade existe, mas o NULL a fura</h3><span class="kind-chip integ">integridade</span></div>
+        <div class="where">Tabela <code>feriado</code> · modelo de partida, linha 114</div>
+        <p class="why"><strong>Consequência:</strong> o modelo tem <code>UNIQUE (data, campus_id)</code>, mas <code>campus_id</code> é anulável e <strong>dois NULLs nunca conflitam entre si</strong> num <code>UNIQUE</code> comum. Com a convenção “NULL = feriado nacional”, todo feriado nacional é infinitamente duplicável.</p>
         <div class="cmp">
-          <div class="side before"><div class="lbl">Antes</div>
-<pre><code>CREATE TABLE feriado (
-  id integer PRIMARY KEY,
-  data date,
-  descricao varchar(120),
-  campus_id smallint REFERENCES campus
-);
-<del>-- (2026-09-07, NULL) duas vezes? aceita — até com UNIQUE comum.</del></code></pre></div>
-          <div class="side after"><div class="lbl">Depois</div>
-<pre><code>CREATE TABLE feriado (
-  id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  data date NOT NULL,
-  descricao varchar(120) NOT NULL,
-  campus_id smallint
-    REFERENCES campus (id) ON DELETE CASCADE,  <span class="cm">-- NULL = nacional</span>
-<ins>  CONSTRAINT uq_feriado_campus_data
-    UNIQUE NULLS NOT DISTINCT (campus_id, data)</ins>
-);</code></pre></div>
+          <div class="side before"><div class="lbl">Antes · modelo de partida</div>
+<pre><code>campus_id smallint REFERENCES campus,  <span class="cm">-- NULL = todos</span>
+<del>UNIQUE (data, campus_id)</del>
+
+<span class="cm">-- ('2026-09-07','Independência',NULL)</span>
+<span class="cm">-- ('2026-09-07','Duplicata',    NULL)  ← ACEITO</span></code></pre></div>
+          <div class="side after"><div class="lbl">Depois · modelo físico</div>
+<pre><code>campus_id smallint REFERENCES campus (id),
+<ins>CONSTRAINT uq_feriado
+  UNIQUE NULLS NOT DISTINCT (campus_id, data)</ins>
+<span class="cm">-- recurso do PostgreSQL 15+: NULLs conflitam</span>
+<span class="cm">-- COMMENT documenta: NULL = feriado nacional</span></code></pre></div>
         </div>
-        <div class="proof">Prova: <em>OK [C9] feriado nacional duplicado rejeitado (UNIQUE NULLS NOT DISTINCT)</em>.</div>
+        <div class="proof">Verificado por inserção no modelo de partida: a duplicata nacional foi aceita e a tabela ficou com 2 linhas para 07/09. Prova da correção: <em>OK [C9] feriado nacional duplicado rejeitado (UNIQUE NULLS NOT DISTINCT)</em>.</div>
       </article>
 
-      <!-- C10 -->
-      <article class="fix" id="c10">
-        <div class="head"><span class="code">C10</span><h3><code>turma_horario</code> sem proteção contra choque de sala</h3><span class="kind-chip integ">integridade</span></div>
-        <div class="where">Tabela <code>turma_horario</code> (+ <code>UNIQUE (id, periodo_letivo_id)</code> em <code>turma</code>, extensão <code>btree_gist</code>)</div>
-        <p class="why"><strong>Consequência:</strong> duas turmas na mesma sala, mesmo dia, faixas sobrepostas. UNIQUE não pega — sobreposição não é igualdade (19:00–20:40 ≠ 19:30–21:10, mas colidem). A resposta é uma <strong>restrição de exclusão</strong> com GiST, que compara com <code>&amp;&amp;</code>.</p>
-        <figure>
-          <svg viewBox="0 0 720 120" role="img" aria-label="Linha do tempo de segunda-feira na sala T101: turma A ocupa 19:00 a 20:40 e turma B tenta 19:30 a 21:10; as faixas se sobrepõem, o operador && detecta e o EXCLUDE rejeita a segunda.">
-            <text x="20" y="18" font-size="11" font-weight="700" fill="currentColor" letter-spacing="1">SEGUNDA · SALA T101 · 2026/2</text>
-            <line x1="60" y1="96" x2="700" y2="96" stroke="currentColor" stroke-width="1.2"/>
-            <g font-size="10" fill="currentColor" text-anchor="middle">
-              <text x="60" y="112">18:00</text><text x="220" y="112">19:00</text><text x="380" y="112">20:00</text><text x="540" y="112">21:00</text><text x="700" y="112">22:00</text>
-            </g>
-            <g stroke="currentColor" stroke-opacity=".3"><line x1="60" y1="92" x2="60" y2="100"/><line x1="220" y1="92" x2="220" y2="100"/><line x1="380" y1="92" x2="380" y2="100"/><line x1="540" y1="92" x2="540" y2="100"/><line x1="700" y1="92" x2="700" y2="100"/></g>
-            <!-- turma A 19:00-20:40 -> x 220..486.7 -->
-            <rect x="220" y="34" width="266" height="20" rx="3" fill="currentColor" fill-opacity=".18" stroke="currentColor" stroke-width="1.2"/>
-            <text x="353" y="48" font-size="11" text-anchor="middle" fill="currentColor" font-family="ui-monospace, Menlo, monospace">turma A · 19:00–20:40 (gravada)</text>
-            <!-- turma B 19:30-21:10 -> x 300..566.7 -->
-            <rect x="300" y="60" width="267" height="20" rx="3" fill="#B4232C" fill-opacity=".14" stroke="#B4232C" stroke-width="1.4" stroke-dasharray="5 3"/>
-            <text x="433" y="74" font-size="11" text-anchor="middle" fill="#B4232C" font-weight="700" font-family="ui-monospace, Menlo, monospace">turma B · 19:30–21:10 → REJEITADA</text>
-            <!-- overlap band -->
-            <rect x="300" y="30" width="186" height="54" fill="#B4232C" fill-opacity=".10"/>
-            <text x="393" y="27" font-size="10" text-anchor="middle" fill="#B4232C" font-weight="700">faixa &amp;&amp; faixa = true</text>
-          </svg>
-          <figcaption>Igualdade não detecta a colisão; sobreposição de ranges (<code>&amp;&amp;</code>) detecta. O <code>EXCLUDE USING gist</code> aplica isso na hora do INSERT.</figcaption>
-        </figure>
+      <article class="fix" id="c13">
+        <div class="head"><span class="code">C13</span><h3>A fórmula da média pode <em>punir</em> quem faz a P3</h3><span class="kind-chip integ">integridade</span></div>
+        <div class="where">Tabela <code>historico</code> · coluna <code>media_final</code> · modelo de partida, linhas 174–181</div>
+        <p class="why"><strong>Consequência:</strong> o modelo já traz a coluna gerada com fórmula — mas o <code>GREATEST</code> tem só dois termos e <strong>falta o terceiro</strong>, <code>0.4·a1 + 0.6·a2</code> (a média sem P3). Um aluno que já passaria com A1 e A2, fizer a P3 e for mal, termina com média <em>menor</em> do que teria sem prestá-la. A P3 é substitutiva: nunca deveria piorar o resultado.</p>
         <div class="cmp">
-          <div class="side before"><div class="lbl">Antes</div>
-<pre><code>CREATE TABLE turma_horario (
-  id integer PRIMARY KEY,
-  turma_id integer REFERENCES turma,
-  sala_id integer REFERENCES sala,
-  dia_semana smallint,
-  faixa timerange
-);
-<del>-- mesma sala, mesmo dia, 19:00–20:40 e 19:30–21:10? aceita.
--- dia_semana = 9? aceita.</del></code></pre></div>
-          <div class="side after"><div class="lbl">Depois</div>
-<pre><code><ins>CREATE EXTENSION IF NOT EXISTS btree_gist;</ins>
-<span class="cm">-- (mistura = escalar com &amp;&amp; de range no mesmo GiST)</span>
-
-CREATE TABLE turma_horario (
-  id integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  turma_id integer NOT NULL,
-<ins>  periodo_letivo_id smallint NOT NULL,   -- denormalização CONTROLADA</ins>
-  sala_id integer NOT NULL REFERENCES sala (id),
-<ins>  dia_semana smallint NOT NULL CHECK (dia_semana BETWEEN 1 AND 7),</ins>
-  faixa timerange NOT NULL CHECK (NOT isempty(faixa)),
-<ins>  CONSTRAINT fk_horario_turma_periodo
-    FOREIGN KEY (turma_id, periodo_letivo_id)
-    REFERENCES turma (id, periodo_letivo_id) ON DELETE CASCADE,
-  CONSTRAINT ex_sala_sem_choque EXCLUDE USING gist (
-    periodo_letivo_id WITH =, sala_id WITH =,
-    dia_semana WITH =, faixa WITH &amp;&amp;),
-  CONSTRAINT ex_turma_sem_choque EXCLUDE USING gist (
-    turma_id WITH =, dia_semana WITH =, faixa WITH &amp;&amp;)</ins>
-);</code></pre></div>
+          <div class="side before"><div class="lbl">Antes · modelo de partida</div>
+<pre><code>media_final numeric(4,2) GENERATED ALWAYS AS (
+  CASE
+    WHEN nota_a1 IS NULL OR nota_a2 IS NULL THEN NULL
+    WHEN nota_p3 IS NULL THEN round(0.4*a1 + 0.6*a2, 2)
+<del>    ELSE round(greatest(0.4*p3 + 0.6*a2,</del>
+<del>                        0.4*a1 + 0.6*p3), 2)</del>
+  END) STORED
+<span class="cm">-- a1=8 a2=8 (MF 8,0); faz P3=2 -&gt; MF cai para 5,6</span></code></pre></div>
+          <div class="side after"><div class="lbl">Depois · modelo físico</div>
+<pre><code>media_final numeric(4,2) GENERATED ALWAYS AS (
+  CASE
+    WHEN nota_a1 IS NULL OR nota_a2 IS NULL THEN NULL
+    WHEN nota_p3 IS NULL THEN round(0.4*a1 + 0.6*a2, 2)
+    ELSE round(GREATEST(<ins>0.4*a1 + 0.6*a2,</ins>
+                        0.4*p3 + 0.6*a2,
+                        0.4*a1 + 0.6*p3), 2)
+  END) STORED
+<span class="cm">-- a P3 só pode melhorar</span></code></pre></div>
         </div>
-        <div class="proof">Por que <code>periodo_letivo_id</code> entrou aqui: o conflito só existe <em>dentro do mesmo semestre</em> (a sala ocupada na segunda 19h de 2025/2 não conflita com 2026/2). A FK composta garante que a cópia nunca diverge da turma. Prova: <em>OK [C10] choque de sala rejeitado (exclusion_violation via GiST)</em>.</div>
+        <div class="proof">Por ser <code>GENERATED ALWAYS … STORED</code>, é <strong>impossível</strong> existir média inconsistente com as notas: a regra é do banco, não da aplicação. Prova: <em>OK [C13] escrita direta em media_final rejeitada (generated_always)</em>. <code>STORED</code> é a única modalidade no PG 17 — e é o que torna a coluna indexável (índice B-tree do Marco 2, ganho de 46×).</div>
       </article>
 
-      <!-- C11 -->
-      <article class="fix" id="c11">
-        <div class="head"><span class="code">C11</span><h3><code>log_matricula.matricula_id</code> sem FK — mantido de propósito</h3><span class="kind-chip decis">decisão</span></div>
-        <div class="where">Tabela <code>log_matricula</code></div>
-        <p class="why"><strong>Decisão:</strong> é trilha de auditoria — o registro deve <em>sobreviver</em> à remoção da matrícula que o originou. Com FK + CASCADE o log sumiria junto; com RESTRICT impediria expurgo; com SET NULL perderíamos justamente a referência histórica. Sem FK, com defaults completos. <em>(Testado na prática: um DELETE acidental em <code>matricula</code> apagou o histórico por CASCADE e deixou os 32 mil logs intactos.)</em></p>
+      <article class="fix" id="c5">
+        <div class="head"><span class="code">C5</span><h3>A unicidade de <code>turma</code> é mais fraca do que parece</h3><span class="kind-chip integ">integridade</span></div>
+        <div class="where">Tabela <code>turma</code> · modelo de partida, linha 125</div>
+        <p class="why"><strong>Consequência:</strong> a restrição existe, mas inclui <code>disciplina_id</code> na chave — então o mesmo código de turma pode se repetir no mesmo período letivo, desde que em disciplinas diferentes. O código de turma é o que aparece no sistema acadêmico e no comprovante de matrícula: repetido no mesmo semestre, ele deixa de identificar.</p>
         <div class="cmp">
-          <div class="side before"><div class="lbl">Antes (o modelo já não marcava FK)</div>
-<pre><code>CREATE TABLE log_matricula (
-  id bigint PRIMARY KEY,
-  matricula_id integer,
-  acao varchar(20),
-  ocorrido_em timestamptz,
-  usuario name,
-  detalhe jsonb
-);</code></pre></div>
-          <div class="side after"><div class="lbl">Depois (explicitado + defaults)</div>
-<pre><code>CREATE TABLE log_matricula (
-  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  matricula_id integer,            <span class="cm">-- SEM FK, de propósito</span>
-  acao varchar(20) NOT NULL,
-<ins>  ocorrido_em timestamptz NOT NULL DEFAULT now(),
-  usuario name NOT NULL DEFAULT current_user,</ins>
-  detalhe jsonb                    <span class="cm">-- índice GIN no Marco 2</span>
-);</code></pre></div>
+          <div class="side before"><div class="lbl">Antes · modelo de partida</div>
+<pre><code><del>UNIQUE (codigo, periodo_letivo_id, disciplina_id)</del>
+
+<span class="cm">-- ('CCODM2B', 2026/2, BD II)   ok</span>
+<span class="cm">-- ('CCODM2B', 2026/2, Prog Par) ← ACEITO</span></code></pre></div>
+          <div class="side after"><div class="lbl">Depois · modelo físico</div>
+<pre><code><ins>CONSTRAINT uq_turma_periodo_codigo
+  UNIQUE (periodo_letivo_id, codigo)</ins>
+
+<span class="cm">-- o código se repete ENTRE semestres</span>
+<span class="cm">-- (a cada nova oferta), nunca DENTRO de um</span></code></pre></div>
         </div>
+        <div class="proof">Endurecimento, não ausência: a chave do modelo é válida como restrição, só não captura a regra de negócio certa.</div>
       </article>
 
-      <!-- C12 -->
+      <article class="fix" id="redundante">
+        <div class="head"><span class="code">E6</span><h3>Índice <code>ix_matricula_aluno</code> é redundante</h3><span class="kind-chip desemp">desempenho</span></div>
+        <div class="where">Modelo de partida · linha 225</div>
+        <p class="why"><strong>Consequência:</strong> a restrição <code>UNIQUE (aluno_id, turma_id)</code> da linha 162 já cria um índice cuja <strong>coluna líder</strong> é <code>aluno_id</code>. Um B-tree multicoluna atende consultas sobre qualquer prefixo à esquerda, então o índice avulso não acrescenta capacidade de busca — só custo de manutenção em cada <code>INSERT</code>, <code>UPDATE</code> e <code>DELETE</code>, e espaço em disco.</p>
+        <div class="cmp">
+          <div class="side before"><div class="lbl">Antes · modelo de partida</div>
+<pre><code>UNIQUE (aluno_id, turma_id)   <span class="cm">-- já indexa aluno_id</span>
+<del>CREATE INDEX ix_matricula_aluno</del>
+<del>  ON matricula (aluno_id);</del></code></pre></div>
+          <div class="side after"><div class="lbl">Depois · modelo físico</div>
+<pre><code>UNIQUE (aluno_id, turma_id)
+<ins>-- índice avulso NÃO replicado</ins>
+<span class="cm">-- os 4 índices do Marco 2 cobrem padrões que</span>
+<span class="cm">-- as restrições ainda não atendem</span></code></pre></div>
+        </div>
+        <div class="proof">Saber justificar o índice <em>ausente</em> vale tanto quanto justificar os presentes — é a pergunta natural de arguição sobre <code>06_indices.sql</code>.</div>
+      </article>
+
       <article class="fix" id="c12">
-        <div class="head"><span class="code">C12</span><h3>Tipos indicados mas não definidos; nenhuma validação de domínio</h3><span class="kind-chip omiss">omissão</span></div>
+        <div class="head"><span class="code">C12</span><h3>Domínios: o modelo define quase todos — completamos o que faltava</h3><span class="kind-chip omiss">omissão</span></div>
         <div class="where">Todas as tabelas · tipos <code>nota_t</code>, <code>pct_t</code>, <code>turno_t</code>, <code>status_mat_t</code>, <code>situacao_t</code>, <code>vinculo_t</code>, <code>tipo_sala_t</code>, <code>tipo_disc_t</code> + novo <code>cpf_t</code></div>
         <p class="why"><strong>Consequência:</strong> o diagrama cita <code>nota_t</code>, <code>turno_t</code>… mas não diz o que são; sem definição, nota 15, frequência 130%, CPF com letras, turno "tarde" — tudo entra. Também não marca nulidade. Critério adotado: <strong>ENUM</strong> para conjuntos fechados de rótulos; <strong>DOMAIN</strong> para faixa/formato sobre tipo base; <code>NOT NULL</code> por padrão.</p>
         <div class="cmp">
@@ -1103,28 +980,69 @@ CREATE TYPE situacao_t   AS ENUM ('cursando','aprovado','reprovado_nota',
         <div class="proof">Prova: <em>OK [C12] nota 11 rejeitada pelo domínio nota_t (check_violation)</em>.</div>
       </article>
 
-      <!-- C13 -->
-      <article class="fix" id="c13">
-        <div class="head"><span class="code">C13</span><h3>Colunas geradas indicadas mas não especificadas</h3><span class="kind-chip omiss">omissão</span></div>
-        <div class="where"><code>disciplina.ch_total</code> · <code>historico.media_final</code></div>
-        <p class="why"><strong>Consequência:</strong> o diagrama marca as duas como "gerado" sem dizer a fórmula. Se fossem colunas comuns, alguém gravaria média incoerente com as notas. Sendo <code>GENERATED ALWAYS … STORED</code>, é <em>impossível</em> divergir — e o banco recusa escrita direta. Regra institucional: MF = 0,4·A1 + 0,6·A2; se houver P3, ela substitui a nota que mais beneficia o aluno.</p>
+      <article class="fix" id="c11">
+        <div class="head"><span class="code">C11</span><h3><code>log_matricula.matricula_id</code> sem FK — mantido de propósito</h3><span class="kind-chip decis">decisão</span></div>
+        <div class="where">Tabela <code>log_matricula</code></div>
+        <p class="why"><strong>Decisão:</strong> é trilha de auditoria — o registro deve <em>sobreviver</em> à remoção da matrícula que o originou. Com FK + CASCADE o log sumiria junto; com RESTRICT impediria expurgo; com SET NULL perderíamos justamente a referência histórica. Sem FK, com defaults completos. <em>(Testado na prática: um DELETE acidental em <code>matricula</code> apagou o histórico por CASCADE e deixou os 32 mil logs intactos.)</em></p>
         <div class="cmp">
-          <div class="side before"><div class="lbl">Antes</div>
-<pre><code><del>ch_total smallint      -- "gerado" (como?)
-media_final numeric(4,2)  -- "gerado" (como?)</del></code></pre></div>
-          <div class="side after"><div class="lbl">Depois</div>
-<pre><code><ins>ch_total smallint GENERATED ALWAYS AS (ch_teorica + ch_pratica) STORED,
-
-media_final numeric(4,2) GENERATED ALWAYS AS (
-  CASE
-    WHEN nota_a1 IS NULL OR nota_a2 IS NULL THEN NULL
-    WHEN nota_p3 IS NULL THEN round(0.4*nota_a1 + 0.6*nota_a2, 2)
-    ELSE round(GREATEST(0.4*nota_a1 + 0.6*nota_a2,
-                        0.4*nota_p3 + 0.6*nota_a2,
-                        0.4*nota_a1 + 0.6*nota_p3), 2)
-  END) STORED</ins></code></pre></div>
+          <div class="side before"><div class="lbl">Antes (o modelo já não marcava FK)</div>
+<pre><code>CREATE TABLE log_matricula (
+  id bigint PRIMARY KEY,
+  matricula_id integer,
+  acao varchar(20),
+  ocorrido_em timestamptz,
+  usuario name,
+  detalhe jsonb
+);</code></pre></div>
+          <div class="side after"><div class="lbl">Depois (explicitado + defaults)</div>
+<pre><code>CREATE TABLE log_matricula (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  matricula_id integer,            <span class="cm">-- SEM FK, de propósito</span>
+  acao varchar(20) NOT NULL,
+<ins>  ocorrido_em timestamptz NOT NULL DEFAULT now(),
+  usuario name NOT NULL DEFAULT current_user,</ins>
+  detalhe jsonb                    <span class="cm">-- índice GIN no Marco 2</span>
+);</code></pre></div>
         </div>
-        <div class="proof">Prova: <em>OK [C13] escrita direta em media_final rejeitada (generated_always)</em>. No Marco 2, <code>media_final</code> ganhou índice B-tree — indexar a coluna gerada é indexar a regra.</div>
+      </article>
+
+      <article class="fix" id="conferidos">
+        <div class="head"><span class="code">✓</span><h3>Seis restrições que conferimos e estão corretas no modelo</h3><span class="kind-chip conf">conferido</span></div>
+        <div class="where">Verificado no catálogo do banco após carregar o arquivo de partida</div>
+        <p class="why">Análise crítica também é dizer o que <strong>não</strong> precisa mudar. Estas foram testadas e mantidas — reimplementadas no nosso DDL por igual, nunca porque faltassem.</p>
+        <table class="conf">
+          <thead><tr><th>Código</th><th>Elemento no modelo de partida</th><th>Linha</th><th>Teste</th></tr></thead>
+          <tbody>
+            <tr><td><strong>C1</strong></td><td><code>CREATE TYPE timerange AS RANGE (subtype = time)</code></td><td>21</td><td>o DDL roda limpo, sem um erro</td></tr>
+            <tr><td><strong>C2</strong></td><td><code>matricula UNIQUE (aluno_id, turma_id)</code></td><td>162</td><td>matrícula duplicada rejeitada</td></tr>
+            <tr><td><strong>C3</strong></td><td><code>periodo_letivo UNIQUE (ano, semestre)</code>, <code>CHECK semestre IN (1,2)</code>, <code>CHECK data_fim &gt; data_inicio</code></td><td>102, 105, 106</td><td>período duplicado rejeitado</td></tr>
+            <tr><td><strong>C4</strong></td><td><code>sala UNIQUE (campus_id, codigo)</code></td><td>95</td><td>código único por campus</td></tr>
+            <tr><td><strong>C7</strong></td><td><code>pre_requisito CHECK (disciplina_id &lt;&gt; requisito_id)</code></td><td>76</td><td>autociclo rejeitado</td></tr>
+            <tr><td><strong>C8</strong></td><td><code>curriculo UNIQUE (curso_id, ano_vigencia)</code> + índice único parcial <code>WHERE ativo</code></td><td>45, 48</td><td>um currículo ativo por curso</td></tr>
+          </tbody>
+        </table>
+        <div class="proof"><strong>Limite conhecido em C7:</strong> o <code>CHECK</code> barra <code>A→A</code>, mas <code>A→B</code> seguido de <code>B→A</code> foi <em>aceito</em> no teste. Ciclos maiores não são expressáveis em restrição declarativa — exigem travessia recursiva. A consulta 5 audita a árvore de pré-requisitos com proteção de ciclo; trigger definitiva é candidata registrada.</div>
+      </article>
+
+      <article class="fix" id="c14">
+        <div class="head"><span class="code">C14</span><h3>Nomenclatura de chaves — padronização deliberada</h3><span class="kind-chip decis">decisão</span></div>
+        <div class="where">Todas as tabelas · <strong>pendente de execução</strong></div>
+        <p class="why">O modelo do professor usa <code>id</code> como PK e <code>&lt;tabela&gt;_id</code> como FK. Isso é uma convenção <strong>coerente</strong> — não um erro: <code>curso.campus_id → campus.id</code> lê-se sem ambiguidade. Nossa mudança é padronização deliberada, e o argumento honesto é este, não “o modelo estava errado”.</p>
+        <div class="cmp">
+          <div class="side before"><div class="lbl">Convenção do modelo</div>
+<pre><code>campus (<span class="cm">id</span>, nome, cidade)
+curso  (<span class="cm">id</span>, codigo, ..., campus_id)
+
+SELECT * FROM curso c
+  JOIN campus ca ON ca.id = c.campus_id;</code></pre></div>
+          <div class="side after"><div class="lbl">Convenção adotada</div>
+<pre><code>campus (<ins>id_campus</ins>, nome, cidade)
+curso  (<ins>id_curso</ins>, codigo, ..., <ins>id_campus</ins>)
+
+<ins>SELECT * FROM curso</ins>
+<ins>  JOIN campus USING (id_campus);</ins></code></pre></div>
+        </div>
+        <div class="proof">Ganho concreto: a FK recebe o mesmo nome da PK que referencia, habilitando <code>JOIN … USING</code> e tornando o nome autoexplicativo em consultas com muitas junções. Onde a mesma tabela é referenciada por papel, o nome carrega o papel — <code>pre_requisito.id_disciplina</code> + <code>pre_requisito.id_requisito</code>.</div>
       </article>
 
     </div>
@@ -1135,11 +1053,11 @@ media_final numeric(4,2) GENERATED ALWAYS AS (
 <section class="block" id="mantido">
   <div class="wrap">
     <h2>O que <em>não</em> mudamos — e por quê</h2>
-    <p class="intro">Convenções do modelo lógico que mantivemos de propósito. Perguntas prováveis na arguição.</p>
+    <p class="intro">Convenções do modelo de partida que mantivemos de propósito. Perguntas prováveis na arguição.</p>
     <div class="keep">
       <div class="item">
-        <h3>PK chamada <code>id</code> em toda tabela</h3>
-        <p>Não é erro: é a convenção mais difundida (Rails, Django, Prisma…). A referência à tabela já vem no nome da <em>FK</em> (<code>campus_id</code>, <code>turma_id</code>), então <code>curso.campus_id → campus.id</code> lê-se sem ambiguidade. Renomear para <code>id_campus</code> divergiria do modelo do professor sem ganho de integridade — e integridade é o que a disciplina avalia.</p>
+        <h3>O trigger <code>fn_valida_vaga()</code> continua existindo</h3>
+        <p>Não removemos o trigger do modelo, apesar de <a class="cmark" href="#anomalia">E1</a> mostrar que ele não protege sob concorrência. Ele segue útil como <em>rede de sanidade</em> para gravações fora da transação de matrícula: barra o caso sequencial óbvio. O que mudou é o entendimento do papel dele — proteção de verdade vem do bloqueio explícito ou do nível de isolamento, nunca do trigger sozinho.</p>
       </div>
       <div class="item">
         <h3><code>smallint</code> em campus, curso, período letivo</h3>
@@ -1147,7 +1065,7 @@ media_final numeric(4,2) GENERATED ALWAYS AS (
       </div>
       <div class="item">
         <h3><code>curso_id</code> e <code>curriculo_id</code> ambos em <code>aluno</code></h3>
-        <p>Redundante, sim — mas o modelo pede as duas colunas. Em vez de remover uma, a correção <a class="cmark" href="#c6">C6</a> amarra as duas com FK composta: mantém a conveniência de consulta e elimina a inconsistência.</p>
+        <p>Redundante, sim — mas o modelo de partida traz as duas colunas e removê-las mudaria a interface esperada. Em vez disso, a correção <a class="cmark" href="#c6">C6</a> amarra as duas com FK composta: mantém a conveniência de consulta e elimina a inconsistência.</p>
       </div>
       <div class="item">
         <h3><code>periodo_letivo_id</code> copiado em <code>turma_horario</code></h3>
@@ -1167,7 +1085,7 @@ media_final numeric(4,2) GENERATED ALWAYS AS (
 
 <footer class="end">
   <div class="wrap">
-    <p>Projeto Acadêmico BD2 · IESB 2026/2 · repositório <code>gblzera/bd2-matricula</code>. Esta página é derivada de <code>sql/01_ddl.sql</code> e <code>docs/correcoes-modelo-logico.md</code>; se o DDL mudar, atualize-a. Diagrama renderizado com Mermaid (na versão local, requer internet).</p>
+    <p>Projeto Acadêmico BD2 · IESB 2026/2 · repositório <code>gblzera/bd2-matricula</code>. Esta página é derivada de <code>sql/01_ddl.sql</code> e <code>docs/correcoes-modelo-logico.md</code>; se o DDL mudar, atualize-a. Achados verificados por execução do modelo de partida em banco descartável (PostgreSQL 17) em 17/08/2026. Diagrama renderizado com Mermaid (na versão local, requer internet).</p>
   </div>
 </footer>
 

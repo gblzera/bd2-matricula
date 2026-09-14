@@ -5,7 +5,7 @@ e todos respondem pelo projeto inteiro na arguição cruzada.
 
 | Frente | Responsável | Escopo |
 |---|---|---|
-| 1. Modelagem Física e Desempenho | Gabriel (<gabriel.kpaz@gmail.com>) | DDL completo, tipos/domínios, restrições, índices + EXPLAIN |
+| 1. Modelagem Física e Desempenho | Gabriel Henrique Kuhn Paz — mat. 2612130027 (<gabriel.kpaz@gmail.com>) | DDL completo, tipos/domínios, restrições, índices + EXPLAIN |
 | 2. Transações e Concorrência | _(a definir)_ | anomalia da última vaga, correção por bloqueio e por isolamento |
 | 3. Administração e Operação | _(a definir)_ | views, roles/RLS, backup e restauração |
 

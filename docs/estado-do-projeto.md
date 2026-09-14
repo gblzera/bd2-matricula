@@ -46,31 +46,46 @@ uma tabela por engano (já aconteceu com `matricula`), é só rodar de novo.
 ### Marco 1 — completo e validado
 | Arquivo | Conteúdo |
 |---|---|
-| `sql/01_ddl.sql` | 16 tabelas, tipos/domínios, todas as restrições. Cada correção marcada `[C#]` |
-| `sql/02_carga.sql` | 120 alunos, 34 turmas, 796 matrículas (mínimos: 100/6/300), 100 % determinística, com cenários plantados (TABD-N1 com 1 vaga livre; COMP1-N1 vazia) |
+| `sql/01_ddl.sql` | **41 tabelas** (modelo ampliado, no ar desde 27/08/2026), 16 ENUMs, 3 domínios, `timerange`, todas as restrições. Correções marcadas `[C#]` e decisões da ampliação `[E#]`. Traz também `v_desempenho_matricula` — a view que sucede a coluna GERADA que [E14] removeu de `historico` |
+| `sql/02_carga.sql` | 120 alunos, 34 turmas, 796 matrículas (mínimos: 100/6/300) + 132 pessoas, 1.189 aulas, 17.214 presenças, 995 notas, 22 planos de ensino. 100 % determinística, com cenários plantados: TABD-N1 com 1 vaga livre, COMP1-N1 vazia, LBD2-N1 EAD sem sala, e uma coorte de baixa frequência que produz `reprovado_frequencia` |
 | `sql/03_consultas.sql` | 10 consultas comentadas: junção externa+agregação (3), recursiva árvore de pré-req (5), recursiva "pode cursar" (6), ranking+percentil (7), LAG (8), ranges (9), painel (10) |
-| `sql/90_testes_restricoes.sql` | 8 testes: cada um tenta gravar dado inválido que o modelo original aceitaria e confirma que o banco rejeita |
-| `docs/correcoes-modelo-logico.md` | análise crítica dos 13 erros/omissões do modelo lógico e as correções aplicadas |
+| `sql/90_testes_restricoes.sql` | **21 testes**: 19 tentam gravar dado inválido ([C2]–[C13] e [E2]–[E14]) e confirmam a rejeição; 2 provam o que o modelo deve ACEITAR (dois horários EAD no mesmo dia/faixa; mesmo código de sala em prédios diferentes) |
+| `docs/correcoes-modelo-logico.md` | análise crítica **reescrita em 17/08/2026**: medida contra o SQL de partida do professor (não contra o diagrama), com metodologia executável, 7 erros reais e 6 restrições conferidas e corretas |
 
 ### Marco 2 — completo e validado
 | Arquivo | Conteúdo |
 |---|---|
-| `sql/04_views.sql` | `v_oferta_periodo`, `v_vagas_disponiveis`, `v_historico_aluno` (security_invoker) + `mv_indicadores` com política de refresh justificada |
-| `sql/05_volume_legado.sql` | semestres 2020–2024 (~33 mil matrículas) — sem volume, EXPLAIN não mostra ganho |
-| `sql/06_indices.sql` | 4 índices com EXPLAIN antes/depois: **parcial** (32×), BRIN (3×, 24 kB), B-tree em `media_final` (46×), **GIN jsonb** (21×, = bônus JSONB) |
+| `sql/04_views.sql` | `v_oferta_periodo`, `v_vagas_disponiveis`, `v_historico_aluno` (security_invoker) + `mv_indicadores` e `mv_historico_consolidado`, ambas com política de refresh justificada |
+| `sql/05_volume_legado.sql` | semestres 2020–2024: 3.000 egressos, 400 turmas, ~33 mil matrículas, ~60 mil notas. **Não** reconstitui horário/aula/presença — decisão registrada no cabeçalho do script |
+| `sql/06_indices.sql` | 4 índices com EXPLAIN antes/depois: **parcial** (39×), BRIN (2,7×), B-tree em `mv_historico_consolidado.media_final` (**56 ms na derivação → 0,13 ms na MV indexada**), **GIN jsonb** (18×, = bônus JSONB) |
 | `sql/07_transacoes.sql` + `scripts/demo_concorrencia.sh` | anomalia da última vaga (9/8) reproduzida em 2 sessões reais; correção A `FOR UPDATE`; correção B `SERIALIZABLE` (40001) |
-| `sql/08_seguranca.sql` | roles `papel_aluno`/`secretaria`/`coordenacao`/`al_<RA>`, GRANT/REVOKE, RLS — aluno só vê o próprio histórico |
+| `sql/08_seguranca.sql` | roles `papel_aluno`/`secretaria`/`coordenacao`/`al_<RA>`, GRANT/REVOKE, RLS em **6 tabelas** — `aluno`, `matricula`, `historico` e, por causa da ampliação, `pessoa` [E2], `nota` e `presenca` [E14]. Normalizar moveu o dado pessoal de lugar e as três políticas antigas teriam deixado CPF e notas em aberto |
 | `scripts/backup.sh` / `restore.sh` + `docs/backup-restore.md` | `pg_dump -Fc`, restauração ensaiada em base nova, roteiro de desastre |
 | `docs/evidencias/` | saídas reais: `explain-indices.md`, `transacoes-demo.md`, `rls-demo.md` |
 
 ### Extras
-- `docs/modelo-fisico.html` — página visual: diagrama ER (pé-de-galinha), catálogo das 16 tabelas com PK/FK/U/GEN, as 13 correções em **antes | depois**, e seção "o que não mudamos". Abrir com `open docs/modelo-fisico.html` (diagrama usa Mermaid via CDN). Também publicada como artifact privado.
+- `docs/modelo-tabelas.drawio` — **a modelagem oficial**: p.1 com as 41 tabelas, os 60 relacionamentos e o painel de normalização; p.2 com as decisões [E1]–[E16]. Exportar PNG só da página 1.
+- `docs/modelo-fisico.html` — página visual da **BASE** (16 tabelas): diagrama ER (pé-de-galinha), catálogo com PK/FK/U/GEN, as 13 correções em **antes | depois**. Documenta o ponto de partida, não o modelo em produção. Abrir com `open docs/modelo-fisico.html` (diagrama usa Mermaid via CDN).
 - `docs/plano-marco2.md` — plano original (marcado como implementado; registro do processo).
 - `README.md` — sobe do zero, estrutura, roteiro das demos ao vivo.
 
 ---
 
-## 4. As 13 correções ao modelo lógico (síntese)
+## 4. As correções ao modelo de partida (síntese)
+
+> **Revisado em 17/08/2026.** A tabela abaixo é a versão original, escrita contra
+> o **diagrama**. O modelo de partida do professor
+> (`docs/banco_de_dados_matricula_com_erros.sql`) foi então carregado num banco
+> descartável e inspecionado: **o DDL dele roda limpo e já traz C2, C3, C4, C7,
+> C8, C1 e as duas colunas geradas com fórmula.** A análise vigente é
+> `docs/correcoes-modelo-logico.md`, que separa erros reais de restrições
+> conferidas. Os erros reais são: o trigger `fn_valida_vaga()` sem proteção sob
+> concorrência (E1), o `EXCLUDE` sem período letivo — **forte demais**, não fraco
+> (C10), o feriado nacional duplicável por NULL (C9), as duas FKs soltas em
+> `aluno` (C6), a fórmula da média que pune quem faz P3 (C13), o índice
+> redundante (E6) e a unicidade fraca de `turma` (C5).
+
+### Versão original (contra o diagrama — mantida por histórico)
 
 | # | Tabela | Problema no modelo | Correção |
 |---|---|---|---|
@@ -85,6 +100,7 @@ uma tabela por engano (já aconteceu com `matricula`), é só rodar de novo.
 | C9 | feriado | duplicável; NULL sem semântica | `UNIQUE NULLS NOT DISTINCT (campus_id, data)`; NULL = nacional |
 | C10 | turma_horario | choque de sala não impedido | `EXCLUDE USING gist (periodo, sala, dia, faixa &&)` + `periodo_letivo_id` denormalizado com FK composta |
 | C11 | log_matricula | sem FK (modelo já não marcava) | **mantido sem FK, de propósito** (auditoria sobrevive à origem) |
+| C15 | (schema) | tudo em `public`; o professor usa `academico` | **`CREATE SCHEMA academico`** + `search_path` + extensão fixada em `public` — aplicado em 17/08/2026 |
 | C12 | todas | tipos citados e não definidos; sem NOT NULL/CHECK | domínios `nota_t`/`pct_t`/`cpf_t`, enums, NOT NULL padrão, checks |
 | C13 | disciplina, historico | colunas "geradas" sem fórmula | `GENERATED ALWAYS AS (...) STORED` (`ch_total`, `media_final`) |
 
@@ -162,6 +178,17 @@ autoexplicativa é prática de mercado, e a mudança está justificada e testada
 
 ## 6. Pendências (além do C14)
 
+0. ~~Migrar `public` → `academico`~~ **feito em 17/08/2026** (C15). Inclui:
+   extensão `btree_gist` fixada em `public` (schema estável sobrevive ao reset de
+   `academico`), `ALTER DATABASE ... SET search_path`, `search_path` explícito em
+   cada script, e o `SET search_path` da função `SECURITY DEFINER` migrado —
+   este último era o que quebraria o RLS em silêncio. Validado: `run_all.sh`
+   verde, reconstrução do zero em base virgem verde, os 3 modos de
+   `demo_concorrencia.sh` verdes.
+0b. ~~Reescrever a análise crítica~~ **feito em 17/08/2026**. `modelo-fisico.html`
+   atualizado junto: metodologia, novos cards (E1 trigger, C10 invertido, E6
+   índice redundante, C15 schema, C14), card consolidado dos 6 conferidos, e as
+   âncoras remapeadas.
 1. **Cadência de commits** — tudo nasceu em poucos dias; o professor penaliza concentração. Ir refinando e commitando até 14/09 e 06/11 (o C14 é uma boa oportunidade de vários commits pequenos e legítimos).
 2. **Fechar o grupo de 3** e preencher `AUTORES.md` (frentes 2 e 3). Colegas precisam **commitar** — autoria é avaliada. Adicionar como colaboradores no repo.
 3. **Dar acesso ao professor** antes de 14/09: `gh repo edit gblzera/bd2-matricula --visibility public --accept-visibility-change-consequences` **ou** convite de colaborador. Confirmar em aula **como** ele recebe o link.
