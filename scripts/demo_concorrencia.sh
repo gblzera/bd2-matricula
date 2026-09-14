@@ -24,27 +24,29 @@ case "$MODO" in
   *) echo "modo inválido: use sem_protecao | lock | serializable"; exit 1 ;;
 esac
 
-TURMA=$($PSQL -c "SELECT t.id FROM turma t JOIN periodo_letivo pl ON pl.id = t.periodo_letivo_id
-                  WHERE t.codigo = 'TABD-N1' AND pl.ano = 2026 AND pl.semestre = 2")
+TURMA=$($PSQL -c "SELECT t.id_turma FROM turma t
+                  JOIN periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
+                  WHERE t.codigo_turma = 'TABD-N1'
+                    AND pl.ano_periodo_letivo = 2026 AND pl.semestre_periodo_letivo = 2")
 
 # Dois alunos elegíveis (TABD no currículo, ativos, ainda não matriculados)
 read -r ALUNO_A ALUNO_B <<< "$($PSQL -c "
-  SELECT string_agg(id::text, ' ') FROM (
-    SELECT a.id
+  SELECT string_agg(id_aluno::text, ' ') FROM (
+    SELECT a.id_aluno
     FROM aluno a
-    JOIN curriculo_disciplina cd ON cd.curriculo_id = a.curriculo_id
-    JOIN turma t ON t.disciplina_id = cd.disciplina_id
-    WHERE t.id = $TURMA AND a.ativo
+    JOIN curriculo_disciplina cd ON cd.id_curriculo = a.id_curriculo
+    JOIN turma t ON t.id_disciplina = cd.id_disciplina
+    WHERE t.id_turma = $TURMA AND a.status_aluno = 'ativo'
       AND NOT EXISTS (SELECT 1 FROM matricula m
-                      WHERE m.aluno_id = a.id AND m.turma_id = t.id)
-    ORDER BY a.id LIMIT 2) s")"
+                      WHERE m.id_aluno = a.id_aluno AND m.id_turma = t.id_turma)
+    ORDER BY a.id_aluno LIMIT 2) s")"
 
 echo "=============================================================="
 echo " Demo [$MODO] — TABD-N1 (turma id=$TURMA) · alunos $ALUNO_A e $ALUNO_B"
 echo "=============================================================="
 $PSQL -c "SELECT fn_demo_reset($TURMA)"
-$PSQL -c "SELECT 'Estado inicial: ' || confirmadas || '/' || vagas || ' confirmadas'
-          FROM v_vagas_disponiveis WHERE turma_id = $TURMA"
+$PSQL -c "SELECT 'Estado inicial: ' || confirmadas || '/' || vagas_turma || ' confirmadas'
+          FROM v_vagas_disponiveis WHERE id_turma = $TURMA"
 echo ""
 
 OUT_A=$(mktemp); OUT_B=$(mktemp)
@@ -65,9 +67,9 @@ echo ""
 echo "--- Sessão B (aluno $ALUNO_B, sem pausa, entrou 1s depois):"
 cat "$OUT_B"
 echo ""
-$PSQL -c "SELECT 'Estado final: ' || confirmadas || '/' || vagas || ' — ' ||
-          CASE WHEN confirmadas > vagas
+$PSQL -c "SELECT 'Estado final: ' || confirmadas || '/' || vagas_turma || ' — ' ||
+          CASE WHEN confirmadas > vagas_turma
                THEN 'ANOMALIA! turma estourada (overbooking)'
                ELSE 'limite de vagas respeitado' END
-          FROM v_vagas_disponiveis WHERE turma_id = $TURMA"
+          FROM v_vagas_disponiveis WHERE id_turma = $TURMA"
 rm -f "$OUT_A" "$OUT_B"

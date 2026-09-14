@@ -9,6 +9,14 @@
 -- Nenhuma constraint pega isso: o limite de vagas atravessa uma agregação
 -- sobre OUTRA tabela (ver docs/correcoes-modelo-logico.md, seção final).
 --
+-- O QUE A AMPLIAÇÃO MUDOU AQUI: `acao_log_matricula` virou o ENUM acao_log_t
+-- ('insert'/'update'/'delete') — o log audita MUDANÇA DE LINHA, e o evento de
+-- negócio ("matricula_criada") passou para o jsonb. Consequência assumida: a
+-- RECUSA de vaga deixou de gerar linha de log, porque recusa não muda linha
+-- nenhuma. Ela continua visível no retorno da função (é o que a demonstração
+-- imprime); auditar tentativas exigiria um log de EVENTOS, que é outra tabela
+-- e não foi criada por antecipação.
+--
 -- Este script instala as funções; a demonstração ao vivo usa os roteiros de
 -- scripts/concorrencia/ orquestrados por scripts/demo_concorrencia.sh, e a
 -- execução capturada fica em docs/evidencias/transacoes-demo.md.
@@ -16,6 +24,13 @@
 -- Execução:  docker exec -i bd2_aluno_postgres psql -U bd2 -d matricula < sql/07_transacoes.sql
 -- ============================================================================
 \set ON_ERROR_STOP on
+
+-- [C15] Todos os objetos vivem no schema `academico`, alinhado ao modelo de
+-- partida do professor (docs/banco_de_dados_matricula_com_erros.sql, que abre
+-- com `SET search_path TO academico, public`). O search_path é fixado aqui
+-- para que este script seja executável isoladamente.
+SET search_path TO academico, public;
+
 
 BEGIN;
 
@@ -34,29 +49,28 @@ DECLARE
   v_confirmadas int;
   v_matricula_id int;
 BEGIN
-  SELECT vagas INTO v_vagas FROM turma WHERE id = p_turma;
+  SELECT vagas_turma INTO v_vagas FROM turma WHERE id_turma = p_turma;
 
   SELECT count(*) INTO v_confirmadas                -- LEITURA...
-  FROM matricula WHERE turma_id = p_turma AND status = 'confirmada';
+  FROM matricula WHERE id_turma = p_turma AND status_matricula = 'confirmada';
 
   IF v_confirmadas >= v_vagas THEN
-    INSERT INTO log_matricula (matricula_id, acao, detalhe)
-    VALUES (NULL, 'vaga_recusada',
-            jsonb_build_object('aluno_id', p_aluno, 'turma_id', p_turma,
-                               'ocupacao', v_confirmadas || '/' || v_vagas));
+    -- sem linha de log: recusa não altera linha nenhuma e acao_log_t é DML
     RETURN format('RECUSADA: turma %s cheia (%s/%s)', p_turma, v_confirmadas, v_vagas);
   END IF;
 
   PERFORM pg_sleep(p_pausa);                        -- ...JANELA DA CORRIDA...
 
-  INSERT INTO matricula (aluno_id, turma_id)        -- ...GRAVAÇÃO
+  INSERT INTO matricula (id_aluno, id_turma)        -- ...GRAVAÇÃO
   VALUES (p_aluno, p_turma)
-  RETURNING id INTO v_matricula_id;
+  RETURNING id_matricula INTO v_matricula_id;
 
-  INSERT INTO historico (matricula_id) VALUES (v_matricula_id);
-  INSERT INTO log_matricula (matricula_id, acao, detalhe)
-  VALUES (v_matricula_id, 'matricula_criada',
-          jsonb_build_object('via', 'fn_matricular_sem_protecao'));
+  INSERT INTO historico (id_matricula) VALUES (v_matricula_id);
+  -- [C11] o QUE aconteceu com a linha vai no ENUM; o evento de negócio, no jsonb.
+  -- id_usuario fica no DEFAULT f_usuario_sessao(): quem matriculou é a ROLE [E4].
+  INSERT INTO log_matricula (id_matricula, acao_log_matricula, detalhe_log_matricula)
+  VALUES (v_matricula_id, 'insert',
+          jsonb_build_object('evento', 'matricula_criada', 'via', 'fn_matricular_sem_protecao'));
 
   RETURN format('CONFIRMADA: aluno %s ficou com a vaga %s/%s da turma %s',
                 p_aluno, v_confirmadas + 1, v_vagas, p_turma);
@@ -77,31 +91,30 @@ DECLARE
   v_confirmadas int;
   v_matricula_id int;
 BEGIN
-  SELECT vagas INTO v_vagas
-  FROM turma WHERE id = p_turma
+  SELECT vagas_turma INTO v_vagas
+  FROM turma WHERE id_turma = p_turma
   FOR UPDATE;                                       -- <<< o trecho crítico começa AQUI
 
   SELECT count(*) INTO v_confirmadas
-  FROM matricula WHERE turma_id = p_turma AND status = 'confirmada';
+  FROM matricula WHERE id_turma = p_turma AND status_matricula = 'confirmada';
 
   IF v_confirmadas >= v_vagas THEN
-    INSERT INTO log_matricula (matricula_id, acao, detalhe)
-    VALUES (NULL, 'vaga_recusada',
-            jsonb_build_object('aluno_id', p_aluno, 'turma_id', p_turma,
-                               'ocupacao', v_confirmadas || '/' || v_vagas));
+    -- sem linha de log: recusa não altera linha nenhuma e acao_log_t é DML
     RETURN format('RECUSADA: turma %s cheia (%s/%s)', p_turma, v_confirmadas, v_vagas);
   END IF;
 
   PERFORM pg_sleep(p_pausa);
 
-  INSERT INTO matricula (aluno_id, turma_id)
+  INSERT INTO matricula (id_aluno, id_turma)
   VALUES (p_aluno, p_turma)
-  RETURNING id INTO v_matricula_id;
+  RETURNING id_matricula INTO v_matricula_id;
 
-  INSERT INTO historico (matricula_id) VALUES (v_matricula_id);
-  INSERT INTO log_matricula (matricula_id, acao, detalhe)
-  VALUES (v_matricula_id, 'matricula_criada',
-          jsonb_build_object('via', 'fn_matricular_com_lock'));
+  INSERT INTO historico (id_matricula) VALUES (v_matricula_id);
+  -- [C11] o QUE aconteceu com a linha vai no ENUM; o evento de negócio, no jsonb.
+  -- id_usuario fica no DEFAULT f_usuario_sessao(): quem matriculou é a ROLE [E4].
+  INSERT INTO log_matricula (id_matricula, acao_log_matricula, detalhe_log_matricula)
+  VALUES (v_matricula_id, 'insert',
+          jsonb_build_object('evento', 'matricula_criada', 'via', 'fn_matricular_com_lock'));
 
   RETURN format('CONFIRMADA: aluno %s ficou com a vaga %s/%s da turma %s',
                 p_aluno, v_confirmadas + 1, v_vagas, p_turma);
@@ -123,8 +136,17 @@ CREATE OR REPLACE FUNCTION fn_demo_reset(p_turma integer)
 RETURNS text LANGUAGE plpgsql AS $$
 DECLARE v_removidas int;
 BEGIN
+  -- [E13] nota e presenca apontam para matricula por FK COMPOSTA e SEM cascata
+  -- (de propósito: nota não some por acidente). Numa matrícula de demo elas não
+  -- existem, mas o DELETE explícito mantém a função correta se um dia existirem.
+  DELETE FROM nota n USING matricula m
+   WHERE m.id_matricula = n.id_matricula
+     AND m.id_turma = p_turma AND m.data_matricula >= date_trunc('day', now());
+  DELETE FROM presenca pr USING matricula m
+   WHERE m.id_matricula = pr.id_matricula
+     AND m.id_turma = p_turma AND m.data_matricula >= date_trunc('day', now());
   DELETE FROM matricula
-  WHERE turma_id = p_turma AND data_matricula >= date_trunc('day', now());
+  WHERE id_turma = p_turma AND data_matricula >= date_trunc('day', now());
   GET DIAGNOSTICS v_removidas = ROW_COUNT;
   RETURN format('Reset: %s matrícula(s) de demonstração removida(s) da turma %s.',
                 v_removidas, p_turma);

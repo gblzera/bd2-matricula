@@ -25,6 +25,7 @@ docker exec -i bd2_aluno_postgres pg_restore -U bd2 -d "$DESTINO" --no-owner < "
 echo ""
 echo "Restauração concluída em '$DESTINO'. Conferência de volumes:"
 docker exec bd2_aluno_postgres psql -U bd2 -d "$DESTINO" -c \
-  "SELECT 'alunos' AS tabela, count(*) FROM aluno
+  "SET search_path TO academico, public;
+   SELECT 'alunos' AS tabela, count(*) FROM aluno
    UNION ALL SELECT 'matriculas', count(*) FROM matricula
    UNION ALL SELECT 'historicos', count(*) FROM historico;"
