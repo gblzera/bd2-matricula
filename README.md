@@ -138,6 +138,11 @@ em avaliação de outra turma é impossível.
 | Marco 2 | 06/11/2026 | views, índices, transações, segurança, backup | ✅ neste repositório |
 | Apresentação | 09/11 ou 16/11 | demonstração ao vivo + arguição cruzada | roteiros prontos em `docs/evidencias/` |
 
+## Apresentação
+
+Roteiro completo do seminário (minuto a minuto, comandos validados, fallbacks e
+mapa de estudo da arguição): [docs/roteiro-apresentacao.md](docs/roteiro-apresentacao.md).
+
 ## Demonstrações rápidas (roteiro da apresentação)
 
 ```bash
