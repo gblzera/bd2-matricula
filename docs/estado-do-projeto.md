@@ -14,7 +14,7 @@
 | Disciplina | Banco de Dados II (CCO072) · IESB · 2026/2 · Prof. Rodrigo Gonçalves |
 | Tema | Sistema de Matrícula Acadêmica — modelo lógico fornecido pelo professor, com erros propositais |
 | SGBD | PostgreSQL 17 (Docker oficial da disciplina, cópia em `ambiente/`) |
-| Repositório | https://github.com/gblzera/bd2-matricula — **privado** por enquanto |
+| Repositório | https://github.com/gblzera/bd2-matricula — **público** desde 13/09/2026 (véspera do Marco 1) |
 | Pasta local | `~/Desktop/stopreadingmyfiles/vscode/DataBase/bd2-matricula` |
 | Grupo | previsto de 3; hoje **Gabriel sozinho** (frentes 2 e 3 do `AUTORES.md` em aberto) |
 | Marco 1 | **14/09/2026** — DDL + carga + 10 consultas (2,0 pts na A1) |
