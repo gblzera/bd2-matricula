@@ -34,6 +34,7 @@ ou simplesmente rodar `./scripts/run_all.sh` de novo: **todos os scripts são id
 sql/
   01_ddl.sql                  Marco 1 · 41 tabelas, tipos, domínios, restrições + a view de derivação
   02_carga.sql                Marco 1 · carga determinística (120 alunos, 34 turmas, ~800 matrículas,
+  02b_geografia_ibge.sql      Geografia completa do Brasil (IBGE): 27 estados, 5.570 municípios [gerado]
                               1.189 aulas, 17 mil presenças, 995 notas)
   03_consultas.sql            Marco 1 · 10 consultas comentadas (recursivas, janelas, ranges)
   04_views.sql                Marco 2 · 3 views + 2 materialized views (política de refresh justificada)
