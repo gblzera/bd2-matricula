@@ -14,6 +14,12 @@ Notação (mín, máx) de Elmasri: o par fica junto da ENTIDADE que ele restring
 e diz quantas vezes CADA instância dela participa do relacionamento.
 
 Uso:  python3 scripts/gerar_modelo_logico.py <banco> <schema> <saida.drawio> "<título da página>"
+
+ATENÇÃO: docs/modelo-tabelas.drawio (p.1) foi ENRIQUECIDO à mão depois de
+gerado — anotações [C#]/[E#], CHECKs por coluna e o painel de normalização
+(1.354 rótulos vs 1.230 da saída crua). NUNCA regenerar por cima dele; para
+conferir sincronia de esquema, gerar num arquivo temporário e comparar.
+docs/modelo-college.drawio é saída crua deste script e pode ser regenerado.
 """
 import html, io, sys, subprocess, collections
 
