@@ -4086,7 +4086,8 @@
         <mxCell id="chave" value="&lt;b&gt;(min, max)&lt;/b&gt; next to each entity: how many times EACH of its rows takes part in the relationship &amp;#183; &lt;b&gt;PK&lt;/b&gt; primary key &amp;#183; &lt;b&gt;FK&lt;/b&gt; foreign key &amp;#183; &lt;b&gt;U&lt;/b&gt; unique" style="text;html=1;align=left;verticalAlign=middle;fillColor=#ffffff;strokeColor=#999999;fontSize=11;spacing=6;" vertex="1" parent="1">
           <mxGeometry x="40" y="1704" width="1000" height="34" as="geometry" />
         </mxCell>
-      </root>
+              <mxCell id="note_ibge_city" value="&#9733; SEEDED with the official IBGE list: 27 states and 5,570 municipalities, 7-digit IBGE codes. Generated, committed seed: college/02b_geography_ibge.sql" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=top;fontSize=10;fillColor=#FFF8E1;strokeColor=#B58900;fontColor=#333333;spacing=6;" vertex="1" parent="1"><mxGeometry x="1166" y="224" width="300" height="120" as="geometry"/></mxCell>
+</root>
     </mxGraphModel>
   </diagram>
 </mxfile>
