@@ -62,12 +62,13 @@ college/
   02_seed.sql                 mesma carga determinística
   03_views.sql                views + materialized views
   04_legacy_volume.sql        semestres legados
-.github/workflows/
-  banco.yml                   CI: reconstrói o banco do zero a cada push e confere os 20 testes
 ambiente/
   docker-compose.yml          Cópia do ambiente oficial da disciplina
+.github/workflows/
+  banco.yml                   CI: reconstrói o banco do zero a cada push e confere os 20 testes
 scripts/
   run_all.sh                  Reconstrói o banco inteiro na ordem (01→08 + testes)
+  grafo.sh                    Grafo de impacto do projeto (Graphify): quem lê/depende de cada tabela
   gerar_college.py            Gera college/ a partir de sql/ pelo mapa de tradução
   demo_concorrencia.sh        Disputa da última vaga: sem_protecao | lock | serializable
   backup.sh / restore.sh      Backup pg_dump -Fc e restauração ensaiada
@@ -153,7 +154,7 @@ em avaliação de outra turma é impossível.
 ## Integração contínua
 
 `.github/workflows/banco.yml` reconstrói o banco **do zero** a cada push que
-toca `sql/` ou `scripts/`: sobe um `postgres:17` limpo, roda os scripts com
+toca `sql/` ou `scripts/`: sobe um `postgres:17` limpo, roda os 10 scripts com
 `ON_ERROR_STOP`, e falha se qualquer um dos **20 testes de restrição** deixar de
 imprimir OK — a contagem é conferida, então um teste que simplesmente sumisse
 também derruba o build. Depois confere os cenários plantados (41 tabelas,
@@ -162,6 +163,22 @@ TABD-N1 com 1 vaga, COMP1-N1 vazia, LBD2-N1 EAD).
 O mesmo `run_all.sh` serve as duas máquinas: sem argumento fala com o contêiner
 via `docker exec`; com `DATABASE_URL` definido fala por `psql` direto, que é o
 modo do CI. Um teste que só roda numa das duas não é um teste.
+
+## Grafo de impacto (opcional)
+
+`./scripts/grafo.sh` monta um grafo do projeto com o [Graphify](https://github.com/Graphify-Labs/graphify),
+cruzando o código com a introspecção do banco vivo. Ele responde o que o
+diagrama não responde — **impacto**:
+
+```bash
+./scripts/grafo.sh                 # constrói (tudo local, sem LLM)
+./scripts/grafo.sh afeta matricula # quem lê a tabela matricula
+./scripts/grafo.sh hubs            # nós mais conectados
+```
+
+Não substitui `docs/modelo-tabelas.drawio`: a introspecção mapeia tabelas,
+views, funções e FKs, mas **não traz coluna nem cardinalidade**. Para o modelo,
+o diagrama; para "o que quebra se eu mexer aqui", o grafo.
 
 ## Marcos
 
