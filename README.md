@@ -42,7 +42,7 @@ sql/
   06_indices.sql              Marco 2 · 4 índices (parcial, BRIN, B-tree, GIN bônus) + EXPLAIN
   07_transacoes.sql           Marco 2 · funções de matrícula (anomalia + correção por lock)
   08_seguranca.sql            Marco 2 · papéis, GRANT/REVOKE e RLS (com demo)
-  90_testes_restricoes.sql    21 testes: o que o modelo deve REJEITAR [C2]–[C13], [E2]–[E14] — e o que deve ACEITAR
+  90_testes_restricoes.sql    20 testes: 18 do que o modelo deve REJEITAR ([C2]–[C13], [E2]–[E14]) e 2 do que deve ACEITAR
 docs/
   modelo-er.drawio            Modelagem da BASE (16 tabelas): conceitual, lógico/físico, correções C1–C15
   esboco-schema-ampliado.md   Esboço do grupo que originou a ampliação (revisado e testado)
@@ -64,14 +64,34 @@ college/
   04_legacy_volume.sql        semestres legados
 ambiente/
   docker-compose.yml          Cópia do ambiente oficial da disciplina
+.github/workflows/
+  banco.yml                   CI: reconstrói o banco do zero a cada push e confere os 20 testes
 scripts/
   run_all.sh                  Reconstrói o banco inteiro na ordem (01→08 + testes)
+  grafo.sh                    Grafo de impacto do projeto (Graphify): quem lê/depende de cada tabela
   gerar_college.py            Gera college/ a partir de sql/ pelo mapa de tradução
   demo_concorrencia.sh        Disputa da última vaga: sem_protecao | lock | serializable
   backup.sh / restore.sh      Backup pg_dump -Fc e restauração ensaiada
   concorrencia/               Roteiros das sessões (READ COMMITTED e SERIALIZABLE)
 AUTORES.md                    Frentes de responsabilidade de cada integrante
 ```
+
+## Entrega do Marco 1 — um arquivo só
+
+O professor pediu no Classroom que **"o SQL deve ser executado em única vez"**.
+`entrega_marco1.sql` é isso: os scripts do Marco 1 concatenados na ordem de
+execução, rodando de ponta a ponta numa só chamada.
+
+```bash
+createdb matricula
+psql -v ON_ERROR_STOP=1 -d matricula -f entrega_marco1.sql
+```
+
+Cria as 41 tabelas com as restrições, carrega 120 alunos / 34 turmas / 796
+matrículas (mínimos: 100/6/300) e a geografia do IBGE, e roda as 10 consultas.
+É **gerado** por `./scripts/gerar_entrega.sh` a partir de `sql/01`, `02`, `02b`
+e `03` — não editar à mão, senão diverge da fonte. Os scripts numerados
+continuam no repositório, como pede o item 4.3 do enunciado.
 
 ## O ponto central: os erros do modelo lógico
 
@@ -130,6 +150,35 @@ ficou em `backups/matricula_v1_16tabelas_20260827.dump`.
 Nenhuma dessas regras usa trigger: a coerência entre aula, presença, nota e turma é
 garantida por **FK composta** [E13] — `90_testes_restricoes.sql` prova que uma nota
 em avaliação de outra turma é impossível.
+
+## Integração contínua
+
+`.github/workflows/banco.yml` reconstrói o banco **do zero** a cada push que
+toca `sql/` ou `scripts/`: sobe um `postgres:17` limpo, roda os 10 scripts com
+`ON_ERROR_STOP`, e falha se qualquer um dos **20 testes de restrição** deixar de
+imprimir OK — a contagem é conferida, então um teste que simplesmente sumisse
+também derruba o build. Depois confere os cenários plantados (41 tabelas,
+TABD-N1 com 1 vaga, COMP1-N1 vazia, LBD2-N1 EAD).
+
+O mesmo `run_all.sh` serve as duas máquinas: sem argumento fala com o contêiner
+via `docker exec`; com `DATABASE_URL` definido fala por `psql` direto, que é o
+modo do CI. Um teste que só roda numa das duas não é um teste.
+
+## Grafo de impacto (opcional)
+
+`./scripts/grafo.sh` monta um grafo do projeto com o [Graphify](https://github.com/Graphify-Labs/graphify),
+cruzando o código com a introspecção do banco vivo. Ele responde o que o
+diagrama não responde — **impacto**:
+
+```bash
+./scripts/grafo.sh                 # constrói (tudo local, sem LLM)
+./scripts/grafo.sh afeta matricula # quem lê a tabela matricula
+./scripts/grafo.sh hubs            # nós mais conectados
+```
+
+Não substitui `docs/modelo-tabelas.drawio`: a introspecção mapeia tabelas,
+views, funções e FKs, mas **não traz coluna nem cardinalidade**. Para o modelo,
+o diagrama; para "o que quebra se eu mexer aqui", o grafo.
 
 ## Marcos
 

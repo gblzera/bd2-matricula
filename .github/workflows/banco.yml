@@ -1,0 +1,118 @@
+# O banco se reconstrói do zero e prova as próprias restrições, a cada push.
+#
+# Por que existe: `sql/90_testes_restricoes.sql` já provava que o modelo
+# rejeita o que deve rejeitar — mas nada rodava isso sozinho. Regressão em
+# DDL ou carga só aparecia quando alguém lembrava de rodar. Agora aparece
+# no push.
+#
+# O que é verificado, nesta ordem:
+#   1. os 10 scripts sobem numa base limpa, com ON_ERROR_STOP — qualquer erro
+#      de SQL derruba o job;
+#   2. as asserções embutidas na carga (mínimos do enunciado e os cenários
+#      plantados: TABD-N1 com 1 vaga, COMP1-N1 vazia, LBD2-N1 EAD) passam;
+#   3. os 20 testes de restrição imprimem OK — e a CONTAGEM é conferida, senão
+#      um teste que deixasse de rodar passaria despercebido.
+name: banco
+
+on:
+  push:
+    paths: ['sql/**', 'scripts/**', '.github/workflows/banco.yml']
+  pull_request:
+    paths: ['sql/**', 'scripts/**', '.github/workflows/banco.yml']
+  workflow_dispatch:
+
+jobs:
+  reconstruir:
+    name: reconstrói e prova as restrições
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        # mesma major do ambiente da disciplina
+        image: postgres:17
+        env:
+          POSTGRES_USER: bd2
+          POSTGRES_PASSWORD: bd2
+          POSTGRES_DB: matricula
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U bd2 -d matricula"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://bd2:bd2@localhost:5432/matricula
+      PGCLIENTENCODING: UTF8
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: cliente psql 17
+        # o client do runner costuma estar atrás do servidor; o DDL usa
+        # \gexec e UNIQUE NULLS NOT DISTINCT, então alinhamos a major
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] \
+            https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17
+          psql --version
+
+      - name: reconstruir o banco inteiro
+        run: ./scripts/run_all.sh 2>&1 | tee saida.txt
+
+      - name: conferir os 20 testes de restrição
+        run: |
+          esperado=20
+          obtidos=$(grep -c 'NOTICE:  OK ' saida.txt || true)
+          echo "testes que imprimiram OK: $obtidos (esperado $esperado)"
+          if [ "$obtidos" -ne "$esperado" ]; then
+            echo "::error::esperados $esperado testes de restrição, encontrados $obtidos"
+            grep 'NOTICE:  OK ' saida.txt || echo '(nenhum)'
+            exit 1
+          fi
+          if grep -q 'TESTE FALHOU' saida.txt; then
+            echo "::error::algum teste aceitou dado que deveria rejeitar"
+            grep 'TESTE FALHOU' saida.txt
+            exit 1
+          fi
+
+      - name: conferir os cenários plantados
+        run: |
+          psql -q -v ON_ERROR_STOP=1 "$DATABASE_URL" -f - <<'SQL'
+          SET search_path TO academico, public;
+          DO $$
+          DECLARE v_livres int; v_comp1 int; v_ead int; v_tab int;
+          BEGIN
+            SELECT vagas_turma - count(*) FILTER (WHERE m.status_matricula = 'confirmada')
+              INTO v_livres
+              FROM turma t LEFT JOIN matricula m ON m.id_turma = t.id_turma
+             WHERE t.codigo_turma = 'TABD-N1' GROUP BY t.vagas_turma;
+            SELECT count(*) INTO v_comp1 FROM matricula m JOIN turma t ON t.id_turma = m.id_turma
+             WHERE t.codigo_turma = 'COMP1-N1';
+            SELECT count(*) INTO v_ead FROM turma_horario th JOIN turma t ON t.id_turma = th.id_turma
+             WHERE t.codigo_turma = 'LBD2-N1' AND th.id_sala IS NULL;
+            SELECT count(*) INTO v_tab FROM information_schema.tables
+             WHERE table_schema = 'academico' AND table_type = 'BASE TABLE';
+            IF v_tab    <> 41 THEN RAISE EXCEPTION 'esperadas 41 tabelas, existem %', v_tab; END IF;
+            IF v_livres <> 1  THEN RAISE EXCEPTION 'TABD-N1 deveria ter 1 vaga livre, tem %', v_livres; END IF;
+            IF v_comp1  <> 0  THEN RAISE EXCEPTION 'COMP1-N1 deveria estar vazia, tem % matrículas', v_comp1; END IF;
+            IF v_ead    <  1  THEN RAISE EXCEPTION 'LBD2-N1 deveria ter horário EAD sem sala'; END IF;
+            RAISE NOTICE 'cenários intactos: 41 tabelas, TABD-N1 1/8 livre, COMP1-N1 vazia, LBD2-N1 EAD';
+          END $$;
+          SQL
+
+      - name: resumo
+        if: always()
+        run: |
+          {
+            echo "### Banco reconstruído do zero"
+            echo ""
+            grep -E '^====================' saida.txt | sed 's/=//g;s/^ */- /' || true
+            echo ""
+            echo "Testes de restrição que passaram: $(grep -c 'NOTICE:  OK ' saida.txt || echo 0)/20"
+          } >> "$GITHUB_STEP_SUMMARY"
