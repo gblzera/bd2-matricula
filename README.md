@@ -42,7 +42,7 @@ sql/
   06_indices.sql              Marco 2 · 4 índices (parcial, BRIN, B-tree, GIN bônus) + EXPLAIN
   07_transacoes.sql           Marco 2 · funções de matrícula (anomalia + correção por lock)
   08_seguranca.sql            Marco 2 · papéis, GRANT/REVOKE e RLS (com demo)
-  90_testes_restricoes.sql    21 testes: o que o modelo deve REJEITAR [C2]–[C13], [E2]–[E14] — e o que deve ACEITAR
+  90_testes_restricoes.sql    20 testes: 18 do que o modelo deve REJEITAR ([C2]–[C13], [E2]–[E14]) e 2 do que deve ACEITAR
 docs/
   modelo-er.drawio            Modelagem da BASE (16 tabelas): conceitual, lógico/físico, correções C1–C15
   esboco-schema-ampliado.md   Esboço do grupo que originou a ampliação (revisado e testado)

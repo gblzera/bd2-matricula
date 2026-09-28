@@ -49,7 +49,7 @@ uma tabela por engano (já aconteceu com `matricula`), é só rodar de novo.
 | `sql/01_ddl.sql` | **41 tabelas** (modelo ampliado, no ar desde 27/08/2026), 16 ENUMs, 3 domínios, `timerange`, todas as restrições. Correções marcadas `[C#]` e decisões da ampliação `[E#]`. Traz também `v_desempenho_matricula` — a view que sucede a coluna GERADA que [E14] removeu de `historico` |
 | `sql/02_carga.sql` | 120 alunos, 34 turmas, 796 matrículas (mínimos: 100/6/300) + 132 pessoas, 1.189 aulas, 17.214 presenças, 995 notas, 22 planos de ensino. 100 % determinística, com cenários plantados: TABD-N1 com 1 vaga livre, COMP1-N1 vazia, LBD2-N1 EAD sem sala, e uma coorte de baixa frequência que produz `reprovado_frequencia` |
 | `sql/03_consultas.sql` | 10 consultas comentadas: junção externa+agregação (3), recursiva árvore de pré-req (5), recursiva "pode cursar" (6), ranking+percentil (7), LAG (8), ranges (9), painel (10) |
-| `sql/90_testes_restricoes.sql` | **21 testes**: 19 tentam gravar dado inválido ([C2]–[C13] e [E2]–[E14]) e confirmam a rejeição; 2 provam o que o modelo deve ACEITAR (dois horários EAD no mesmo dia/faixa; mesmo código de sala em prédios diferentes) |
+| `sql/90_testes_restricoes.sql` | **20 testes**: 18 tentam gravar dado inválido ([C2]–[C13] e [E2]–[E14]) e confirmam a rejeição; 2 provam o que o modelo deve ACEITAR (dois horários EAD no mesmo dia/faixa; mesmo código de sala em prédios diferentes) |
 | `docs/correcoes-modelo-logico.md` | análise crítica **reescrita em 17/08/2026**: medida contra o SQL de partida do professor (não contra o diagrama), com metodologia executável, 7 erros reais e 6 restrições conferidas e corretas |
 
 ### Marco 2 — completo e validado
