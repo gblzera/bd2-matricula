@@ -62,6 +62,8 @@ college/
   02_seed.sql                 mesma carga determinística
   03_views.sql                views + materialized views
   04_legacy_volume.sql        semestres legados
+.github/workflows/
+  banco.yml                   CI: reconstrói o banco do zero a cada push e confere os 20 testes
 ambiente/
   docker-compose.yml          Cópia do ambiente oficial da disciplina
 scripts/
@@ -130,6 +132,19 @@ ficou em `backups/matricula_v1_16tabelas_20260827.dump`.
 Nenhuma dessas regras usa trigger: a coerência entre aula, presença, nota e turma é
 garantida por **FK composta** [E13] — `90_testes_restricoes.sql` prova que uma nota
 em avaliação de outra turma é impossível.
+
+## Integração contínua
+
+`.github/workflows/banco.yml` reconstrói o banco **do zero** a cada push que
+toca `sql/` ou `scripts/`: sobe um `postgres:17` limpo, roda os scripts com
+`ON_ERROR_STOP`, e falha se qualquer um dos **20 testes de restrição** deixar de
+imprimir OK — a contagem é conferida, então um teste que simplesmente sumisse
+também derruba o build. Depois confere os cenários plantados (41 tabelas,
+TABD-N1 com 1 vaga, COMP1-N1 vazia, LBD2-N1 EAD).
+
+O mesmo `run_all.sh` serve as duas máquinas: sem argumento fala com o contêiner
+via `docker exec`; com `DATABASE_URL` definido fala por `psql` direto, que é o
+modo do CI. Um teste que só roda numa das duas não é um teste.
 
 ## Marcos
 
