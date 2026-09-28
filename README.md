@@ -75,6 +75,23 @@ scripts/
 AUTORES.md                    Frentes de responsabilidade de cada integrante
 ```
 
+## Entrega do Marco 1 — um arquivo só
+
+O professor pediu no Classroom que **"o SQL deve ser executado em única vez"**.
+`entrega_marco1.sql` é isso: os scripts do Marco 1 concatenados na ordem de
+execução, rodando de ponta a ponta numa só chamada.
+
+```bash
+createdb matricula
+psql -v ON_ERROR_STOP=1 -d matricula -f entrega_marco1.sql
+```
+
+Cria as 41 tabelas com as restrições, carrega 120 alunos / 34 turmas / 796
+matrículas (mínimos: 100/6/300) e a geografia do IBGE, e roda as 10 consultas.
+É **gerado** por `./scripts/gerar_entrega.sh` a partir de `sql/01`, `02`, `02b`
+e `03` — não editar à mão, senão diverge da fonte. Os scripts numerados
+continuam no repositório, como pede o item 4.3 do enunciado.
+
 ## O ponto central: os erros do modelo lógico
 
 O modelo lógico do enunciado contém erros propositais, corrigidos aqui no modelo
