@@ -7,6 +7,34 @@
 
 ## Como subir o banco do zero
 
+**Um comando.** Na primeira subida o contêiner constrói tudo sozinho — as 41
+tabelas, a carga inteira, a geografia do IBGE, as views, os índices e os 22
+testes de restrição — e ainda cria o espelho em inglês:
+
+```bash
+cd ambiente && docker compose up -d
+```
+
+Quando o healthcheck ficar verde, os dois bancos estão prontos: **`matricula`**
+(português) e **`college`** (inglês). Nada mais precisa ser rodado. As subidas
+seguintes reaproveitam o volume e não reexecutam nada.
+
+| Serviço | Endereço | Credenciais |
+|---|---|---|
+| PostgreSQL | `localhost:5432` | usuário `bd2` · senha `bd2` |
+| pgAdmin | `http://localhost:8080` | `admin@iesb.br` · `admin` |
+
+Se as portas 5432 ou 8080 já estiverem ocupadas:
+`PORTA_POSTGRES=5433 PORTA_PGADMIN=8081 docker compose up -d`.
+
+Para reconstruir do zero depois: `docker compose down -v` e subir de novo, ou
+`./scripts/run_all.sh` com o contêiner no ar.
+
+<details>
+<summary>Como era antes (dois passos)</summary>
+
+
+
 Pré-requisito: Docker Desktop instalado.
 
 ```bash
@@ -27,6 +55,8 @@ Pronto. Acessos:
 Para recomeçar do zero: `docker compose down -v` (na pasta `ambiente/`) e repetir os passos —
 ou simplesmente rodar `./scripts/run_all.sh` de novo: **todos os scripts são idempotentes**
 (o DDL recria o esquema, a carga é 100% determinística).
+
+</details>
 
 ## Estrutura do repositório
 

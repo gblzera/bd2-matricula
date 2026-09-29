@@ -27,9 +27,14 @@ services:
       POSTGRES_PASSWORD: bd2
       POSTGRES_DB: matricula
     ports:
-      - "5432:5432"
+      - "${PORTA_POSTGRES:-5432}:5432"
     volumes:
       - bd2_aluno_dados:/var/lib/postgresql/data
+      # Na PRIMEIRA subida, o entrypoint roda o initdb/ e o banco nasce pronto:
+      # 41 tabelas, a carga inteira, views, índices e os 22 testes de restrição.
+      # Nas subidas seguintes o volume já existe e nada é reexecutado.
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+      - ..:/projeto:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U bd2 -d matricula"]
       interval: 10s
@@ -44,7 +49,7 @@ services:
       PGADMIN_DEFAULT_PASSWORD: admin
       PGADMIN_CONFIG_SERVER_MODE: "False"
     ports:
-      - "8080:80"
+      - "${PORTA_PGADMIN:-8080}:80"
     depends_on:
       postgres:
         condition: service_healthy
