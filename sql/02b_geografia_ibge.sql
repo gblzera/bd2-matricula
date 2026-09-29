@@ -9,7 +9,7 @@
 
 BEGIN;
 
-INSERT INTO estado (id_pais, nome_estado, uf_estado)
+INSERT INTO tb_estado (id_pais, nome_estado, uf_estado)
 SELECT p.id_pais, v.nome, v.uf
 FROM (VALUES
   ('Rondônia', 'RO'),
@@ -40,10 +40,10 @@ FROM (VALUES
   ('Goiás', 'GO'),
   ('Distrito Federal', 'DF')
 ) AS v(nome, uf)
-JOIN pais p ON p.sigla_pais = 'BR'
+JOIN tb_pais p ON p.sigla_pais = 'BR'
 ON CONFLICT (id_pais, uf_estado) DO NOTHING;
 
-INSERT INTO cidade (id_estado, nome_cidade, codigo_ibge_cidade)
+INSERT INTO tb_cidade (id_estado, nome_cidade, codigo_ibge_cidade)
 SELECT e.id_estado, v.nome, v.ibge
 FROM (VALUES
   ('RO', 'Alta Floresta D''oeste', '1100015'),
@@ -5617,7 +5617,7 @@ FROM (VALUES
   ('GO', 'Vila Propício', '5222302'),
   ('DF', 'Brasília', '5300108')
 ) AS v(uf, nome, ibge)
-JOIN estado e ON e.uf_estado = v.uf
+JOIN tb_estado e ON e.uf_estado = v.uf
 ON CONFLICT (codigo_ibge_cidade) DO NOTHING;
 
 COMMIT;
@@ -5625,8 +5625,8 @@ COMMIT;
 DO $$
 DECLARE n_est int; n_cid int;
 BEGIN
-  SELECT count(*) INTO n_est FROM estado;
-  SELECT count(*) INTO n_cid FROM cidade;
+  SELECT count(*) INTO n_est FROM tb_estado;
+  SELECT count(*) INTO n_cid FROM tb_cidade;
   IF n_est <> 27   THEN RAISE EXCEPTION 'Geografia: % estados (esperado 27)', n_est; END IF;
   IF n_cid <> 5570 THEN RAISE EXCEPTION 'Geografia: % cidades (esperado 5570)', n_cid; END IF;
   RAISE NOTICE 'Geografia IBGE OK: % estados, % municípios.', n_est, n_cid;
