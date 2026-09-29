@@ -10,7 +10,7 @@
 #      de SQL derruba o job;
 #   2. as asserções embutidas na carga (mínimos do enunciado e os cenários
 #      plantados: TABD-N1 com 1 vaga, COMP1-N1 vazia, LBD2-N1 EAD) passam;
-#   3. os 20 testes de restrição imprimem OK — e a CONTAGEM é conferida, senão
+#   3. os 22 testes de restrição imprimem OK — e a CONTAGEM é conferida, senão
 #      um teste que deixasse de rodar passaria despercebido.
 name: banco
 
@@ -65,9 +65,9 @@ jobs:
       - name: reconstruir o banco inteiro
         run: ./scripts/run_all.sh 2>&1 | tee saida.txt
 
-      - name: conferir os 20 testes de restrição
+      - name: conferir os 22 testes de restrição
         run: |
-          esperado=20
+          esperado=22
           obtidos=$(grep -c 'NOTICE:  OK ' saida.txt || true)
           echo "testes que imprimiram OK: $obtidos (esperado $esperado)"
           if [ "$obtidos" -ne "$esperado" ]; then
@@ -114,5 +114,5 @@ jobs:
             echo ""
             grep -E '^====================' saida.txt | sed 's/=//g;s/^ */- /' || true
             echo ""
-            echo "Testes de restrição que passaram: $(grep -c 'NOTICE:  OK ' saida.txt || echo 0)/20"
+            echo "Testes de restrição que passaram: $(grep -c 'NOTICE:  OK ' saida.txt || echo 0)/22"
           } >> "$GITHUB_STEP_SUMMARY"

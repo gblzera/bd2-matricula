@@ -42,7 +42,7 @@ sql/
   06_indices.sql              Marco 2 · 4 índices (parcial, BRIN, B-tree, GIN bônus) + EXPLAIN
   07_transacoes.sql           Marco 2 · funções de matrícula (anomalia + correção por lock)
   08_seguranca.sql            Marco 2 · papéis, GRANT/REVOKE e RLS (com demo)
-  90_testes_restricoes.sql    20 testes: 18 do que o modelo deve REJEITAR ([C2]–[C13], [E2]–[E14]) e 2 do que deve ACEITAR
+  90_testes_restricoes.sql    22 testes: 20 do que o modelo deve REJEITAR ([C2]–[C13], [E2]–[E19]) e 2 do que deve ACEITAR
 docs/
   modelo-er.drawio            Modelagem da BASE (16 tabelas): conceitual, lógico/físico, correções C1–C15
   esboco-schema-ampliado.md   Esboço do grupo que originou a ampliação (revisado e testado)
@@ -65,7 +65,7 @@ college/
 ambiente/
   docker-compose.yml          Cópia do ambiente oficial da disciplina
 .github/workflows/
-  banco.yml                   CI: reconstrói o banco do zero a cada push e confere os 20 testes
+  banco.yml                   CI: reconstrói o banco do zero a cada push e confere os 22 testes
 scripts/
   run_all.sh                  Reconstrói o banco inteiro na ordem (01→08 + testes)
   grafo.sh                    Grafo de impacto do projeto (Graphify): quem lê/depende de cada tabela
@@ -92,6 +92,25 @@ matrículas (mínimos: 100/6/300) e a geografia do IBGE, e roda as 10 consultas.
 É **gerado** por `./scripts/gerar_entrega.sh` a partir de `sql/01`, `02`, `02b`
 e `03` — não editar à mão, senão diverge da fonte. Os scripts numerados
 continuam no repositório, como pede o item 4.3 do enunciado.
+
+## Convenção de nomes e auditoria
+
+Desde 28/09/2026 o esquema segue o padrão pedido pelo professor: **`tb_`** para
+tabela, **`vw_`** para view, **`vwm_`** para view materializada. São 41 tabelas,
+4 views e 2 materializadas.
+
+Toda tabela de dados carrega três colunas de auditoria — `criado_em`,
+`atualizado_em` e `excluido_em` (exclusão lógica) — acrescentadas por um laço
+no DDL, não copiadas 41 vezes. Um trigger `BEFORE UPDATE` mantém
+`atualizado_em`, e um trigger `AFTER` grava a trilha em `tb_log_auditoria`
+guardando a linha inteira em `jsonb` (antes e depois).
+
+**Isto não contradiz o "sem trigger de validação" do modelo.** A distinção vale
+a pena dizer em voz alta: regra de integridade o banco sabe declarar, e em
+trigger ela vira código com desvio — por isso continuam sendo FK composta,
+EXCLUDE e índice parcial. Auditoria é o caso oposto: não existe forma
+declarativa de dizer "registre quem mudou o quê", e o trigger é a ferramenta
+certa justamente porque intercepta todo caminho de escrita.
 
 ## O ponto central: os erros do modelo lógico
 
@@ -155,7 +174,7 @@ em avaliação de outra turma é impossível.
 
 `.github/workflows/banco.yml` reconstrói o banco **do zero** a cada push que
 toca `sql/` ou `scripts/`: sobe um `postgres:17` limpo, roda os 10 scripts com
-`ON_ERROR_STOP`, e falha se qualquer um dos **20 testes de restrição** deixar de
+`ON_ERROR_STOP`, e falha se qualquer um dos **22 testes de restrição** deixar de
 imprimir OK — a contagem é conferida, então um teste que simplesmente sumisse
 também derruba o build. Depois confere os cenários plantados (41 tabelas,
 TABD-N1 com 1 vaga, COMP1-N1 vazia, LBD2-N1 EAD).
