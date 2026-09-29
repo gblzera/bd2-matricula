@@ -19,7 +19,7 @@
 -- 5 obrigatórias — junção externa com agregação (C3), as duas recursivas
 -- (C5 e C6), ranking com percentil (C7) e LAG (C8).
 --
--- Gerado em 2026-09-28 a partir do commit 716bd9d.
+-- Gerado em 2026-09-28 a partir do commit 5ef51c5.
 -- ============================================================================
 
 
@@ -70,7 +70,7 @@ CREATE TYPE timerange AS RANGE (subtype = time);
 -- docs/modelo-fisico.html, que documenta o ponto de partida.
 CREATE TYPE turno_t                AS ENUM ('matutino', 'noturno');
 CREATE TYPE tipo_sala_t            AS ENUM ('teorica', 'laboratorio', 'auditorio');
-CREATE TYPE vinculo_t              AS ENUM ('pre_requisito', 'co_requisito');
+-- [E17] vinculo_t removido: sem co-requisito, o tipo ficaria sem uso.
 CREATE TYPE tipo_disc_t            AS ENUM ('obrigatoria', 'optativa', 'eletiva');
 CREATE TYPE status_mat_t           AS ENUM ('pendente', 'confirmada', 'trancada', 'cancelada');
 CREATE TYPE situacao_t             AS ENUM ('cursando', 'aprovado', 'reprovado_nota',
@@ -102,41 +102,41 @@ CREATE DOMAIN cpf_t  AS char(11)     CHECK (VALUE ~ '^[0-9]{11}$');
 --    Tira "Brasília" de string repetida: cidade→estado→país com dedup por nível.
 -- ============================================================================
 
-CREATE TABLE pais (
+CREATE TABLE tb_pais (
   id_pais    smallint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   nome_pais  varchar(60) NOT NULL UNIQUE,
   sigla_pais char(2)     NOT NULL UNIQUE                          -- ISO 3166-1
 );
-COMMENT ON TABLE pais IS 'Países [E1].';
+COMMENT ON TABLE tb_pais IS 'Países [E1].';
 
-CREATE TABLE estado (
+CREATE TABLE tb_estado (
   id_estado   smallint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  id_pais     smallint    NOT NULL REFERENCES pais (id_pais),
+  id_pais     smallint    NOT NULL REFERENCES tb_pais (id_pais),
   nome_estado varchar(60) NOT NULL,
   uf_estado   char(2)     NOT NULL,
   CONSTRAINT uq_estado_pais_uf UNIQUE (id_pais, uf_estado)
 );
-COMMENT ON TABLE estado IS 'Unidades federativas [E1].';
+COMMENT ON TABLE tb_estado IS 'Unidades federativas [E1].';
 
-CREATE TABLE cidade (
+CREATE TABLE tb_cidade (
   id_cidade          integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  id_estado          smallint    NOT NULL REFERENCES estado (id_estado),
+  id_estado          smallint    NOT NULL REFERENCES tb_estado (id_estado),
   nome_cidade        varchar(80) NOT NULL,
   codigo_ibge_cidade char(7)     UNIQUE,
   CONSTRAINT uq_cidade_estado_nome UNIQUE (id_estado, nome_cidade)
 );
-COMMENT ON TABLE cidade IS 'Municípios; "Brasilia" ≠ "BRASÍLIA" morre aqui [E1].';
+COMMENT ON TABLE tb_cidade IS 'Municípios; "Brasilia" ≠ "BRASÍLIA" morre aqui [E1].';
 
-CREATE TABLE endereco (
+CREATE TABLE tb_endereco (
   id_endereco          integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  id_cidade            integer      NOT NULL REFERENCES cidade (id_cidade),
+  id_cidade            integer      NOT NULL REFERENCES tb_cidade (id_cidade),
   logradouro_endereco  varchar(120) NOT NULL,
   numero_endereco      varchar(10),                               -- varchar: "s/n"
   complemento_endereco varchar(60),
   bairro_endereco      varchar(60),
   cep_endereco         char(8) CHECK (cep_endereco ~ '^[0-9]{8}$')
 );
-COMMENT ON TABLE endereco IS 'Endereços de pessoas e campi [E1].';
+COMMENT ON TABLE tb_endereco IS 'Endereços de pessoas e campi [E1].';
 
 -- ============================================================================
 -- 3. PESSOAS  [E2] [E3]
@@ -144,9 +144,9 @@ COMMENT ON TABLE endereco IS 'Endereços de pessoas e campi [E1].';
 --    exclusivas (um professor pode ser aluno de outro curso).
 -- ============================================================================
 
-CREATE TABLE pessoa (
+CREATE TABLE tb_pessoa (
   id_pessoa         integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  id_endereco       integer REFERENCES endereco (id_endereco),
+  id_endereco       integer REFERENCES tb_endereco (id_endereco),
   nome_pessoa       varchar(120) NOT NULL,
   email_pessoa      varchar(120) NOT NULL UNIQUE CHECK (position('@' in email_pessoa) > 1),
   -- [E2] CPF é 1:1 com a pessoa no Brasil: fica AQUI, obrigatório, preservando
@@ -154,23 +154,23 @@ CREATE TABLE pessoa (
   cpf_pessoa        cpf_t NOT NULL UNIQUE,
   nascimento_pessoa date  NOT NULL
 );
-COMMENT ON TABLE pessoa IS 'Supertipo de aluno e professor [E2]; nome/e-mail/CPF vivem só aqui.';
+COMMENT ON TABLE tb_pessoa IS 'Supertipo de aluno e professor [E2]; nome/e-mail/CPF vivem só aqui.';
 
-CREATE TABLE telefone (
+CREATE TABLE tb_telefone (
   id_telefone        integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  id_pessoa          integer     NOT NULL REFERENCES pessoa (id_pessoa) ON DELETE CASCADE,
+  id_pessoa          integer     NOT NULL REFERENCES tb_pessoa (id_pessoa) ON DELETE CASCADE,
   numero_telefone    varchar(20) NOT NULL,
   principal_telefone boolean     NOT NULL DEFAULT false,
   tipo_telefone      tipo_telefone_t NOT NULL,
   CONSTRAINT uq_telefone_pessoa_numero UNIQUE (id_pessoa, numero_telefone)
 );
-COMMENT ON TABLE telefone IS 'Multivalorado → tabela (1FN) [E3]. Um principal por pessoa: índice parcial.';
+COMMENT ON TABLE tb_telefone IS 'Multivalorado → tabela (1FN) [E3]. Um principal por pessoa: índice parcial.';
 -- só um telefone principal por pessoa (validado em banco descartável)
-CREATE UNIQUE INDEX uq_telefone_principal ON telefone (id_pessoa) WHERE principal_telefone;
+CREATE UNIQUE INDEX uq_telefone_principal ON tb_telefone (id_pessoa) WHERE principal_telefone;
 
-CREATE TABLE documento_pessoa (
+CREATE TABLE tb_documento_pessoa (
   id_documento_pessoa      integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  id_pessoa                integer     NOT NULL REFERENCES pessoa (id_pessoa) ON DELETE CASCADE,
+  id_pessoa                integer     NOT NULL REFERENCES tb_pessoa (id_pessoa) ON DELETE CASCADE,
   numero_documento_pessoa  varchar(20) NOT NULL,
   orgao_documento_pessoa   varchar(20),
   emissao_documento_pessoa date,
@@ -180,122 +180,122 @@ CREATE TABLE documento_pessoa (
   -- …e uma pessoa tem no máximo um documento de cada tipo
   CONSTRAINT uq_documento_pessoa_tipo UNIQUE (id_pessoa, tipo_documento_pessoa)
 );
-COMMENT ON TABLE documento_pessoa IS 'Documentos além do CPF [E3]; CPF mora em pessoa [E2].';
+COMMENT ON TABLE tb_documento_pessoa IS 'Documentos além do CPF [E3]; CPF mora em pessoa [E2].';
 
-CREATE TABLE usuario (
+CREATE TABLE tb_usuario (
   id_usuario    integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  id_pessoa     integer     NOT NULL UNIQUE REFERENCES pessoa (id_pessoa),
+  id_pessoa     integer     NOT NULL UNIQUE REFERENCES tb_pessoa (id_pessoa),
   login_usuario varchar(60) NOT NULL UNIQUE,     -- = nome da ROLE no PostgreSQL [E4]
   ativo_usuario boolean     NOT NULL DEFAULT true,
   papel_usuario papel_usuario_t NOT NULL
 );
-COMMENT ON TABLE usuario IS 'Conta de acesso; login = ROLE do Postgres, casa com a RLS al_<RA> [E4].';
+COMMENT ON TABLE tb_usuario IS 'Conta de acesso; login = ROLE do Postgres, casa com a RLS al_<RA> [E4].';
 
 -- ============================================================================
 -- 4. ESTRUTURA FÍSICA E ORGANIZACIONAL  [E5] [E6]
 -- ============================================================================
 
-CREATE TABLE campus (
+CREATE TABLE tb_campus (
   id_campus   smallint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   -- UNIQUE honra a cardinalidade (0,1) do lado do endereço (achado F1 da revisão)
-  id_endereco integer     NOT NULL UNIQUE REFERENCES endereco (id_endereco),
+  id_endereco integer     NOT NULL UNIQUE REFERENCES tb_endereco (id_endereco),
   nome_campus varchar(60) NOT NULL UNIQUE
 );
-COMMENT ON TABLE campus IS 'Campi; cidade_campus saiu — vem de endereco→cidade [E1].';
+COMMENT ON TABLE tb_campus IS 'Campi; cidade_campus saiu — vem de endereco→cidade [E1].';
 
-CREATE TABLE departamento (
+CREATE TABLE tb_departamento (
   id_departamento    smallint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  id_campus          smallint    NOT NULL REFERENCES campus (id_campus),
+  id_campus          smallint    NOT NULL REFERENCES tb_campus (id_campus),
   id_professor_chefe integer,       -- FK circular com professor: constraint via ALTER, adiante [E6]
   nome_departamento  varchar(80) NOT NULL,
   sigla_departamento varchar(10) NOT NULL UNIQUE
 );
-COMMENT ON TABLE departamento IS 'Departamentos; chefe é FK circular resolvida por ALTER [E6].';
+COMMENT ON TABLE tb_departamento IS 'Departamentos; chefe é FK circular resolvida por ALTER [E6].';
 
-CREATE TABLE predio (
+CREATE TABLE tb_predio (
   id_predio      smallint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  id_campus      smallint    NOT NULL REFERENCES campus (id_campus),
+  id_campus      smallint    NOT NULL REFERENCES tb_campus (id_campus),
   nome_predio    varchar(60) NOT NULL,
   andares_predio smallint CHECK (andares_predio > 0),
   CONSTRAINT uq_predio_campus_nome UNIQUE (id_campus, nome_predio)
 );
-COMMENT ON TABLE predio IS 'Prédios do campus [E5].';
+COMMENT ON TABLE tb_predio IS 'Prédios do campus [E5].';
 
-CREATE TABLE sala (
+CREATE TABLE tb_sala (
   id_sala         integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   -- [E5] sala muda de dono: o campus vem via prédio. [C4] evolui junto:
   -- código único DENTRO do prédio (prédios do mesmo campus podem repetir).
-  id_predio       smallint    NOT NULL REFERENCES predio (id_predio),
+  id_predio       smallint    NOT NULL REFERENCES tb_predio (id_predio),
   codigo_sala     varchar(10) NOT NULL,
   andar_sala      smallint,
   capacidade_sala smallint    NOT NULL CHECK (capacidade_sala > 0),
   tipo_sala       tipo_sala_t NOT NULL DEFAULT 'teorica',
   CONSTRAINT uq_sala_predio_codigo UNIQUE (id_predio, codigo_sala)   -- [C4→E5]
 );
-COMMENT ON TABLE sala IS 'Salas físicas, por prédio [E5]; [C4] agora por prédio.';
+COMMENT ON TABLE tb_sala IS 'Salas físicas, por prédio [E5]; [C4] agora por prédio.';
 
-CREATE TABLE recurso (
+CREATE TABLE tb_recurso (
   id_recurso   smallint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   nome_recurso varchar(60) NOT NULL UNIQUE
 );
-COMMENT ON TABLE recurso IS 'Recursos alocáveis (projetor, bancada…) [E3].';
+COMMENT ON TABLE tb_recurso IS 'Recursos alocáveis (projetor, bancada…) [E3].';
 
-CREATE TABLE sala_recurso (
-  id_sala                 integer  NOT NULL REFERENCES sala (id_sala) ON DELETE CASCADE,
-  id_recurso              smallint NOT NULL REFERENCES recurso (id_recurso),
+CREATE TABLE tb_sala_recurso (
+  id_sala                 integer  NOT NULL REFERENCES tb_sala (id_sala) ON DELETE CASCADE,
+  id_recurso              smallint NOT NULL REFERENCES tb_recurso (id_recurso),
   quantidade_sala_recurso smallint NOT NULL DEFAULT 1 CHECK (quantidade_sala_recurso > 0),
   PRIMARY KEY (id_sala, id_recurso)
 );
-COMMENT ON TABLE sala_recurso IS 'N:N sala×recurso — o critério para alocar laboratório [E3].';
+COMMENT ON TABLE tb_sala_recurso IS 'N:N sala×recurso — o critério para alocar laboratório [E3].';
 
-CREATE TABLE professor (
+CREATE TABLE tb_professor (
   id_professor        integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  id_pessoa           integer     NOT NULL UNIQUE REFERENCES pessoa (id_pessoa),
-  id_departamento     smallint    NOT NULL REFERENCES departamento (id_departamento),
+  id_pessoa           integer     NOT NULL UNIQUE REFERENCES tb_pessoa (id_pessoa),
+  id_departamento     smallint    NOT NULL REFERENCES tb_departamento (id_departamento),
   matricula_professor varchar(12) NOT NULL UNIQUE,
   regime_professor    regime_professor_t NOT NULL,
   titulacao_professor titulacao_t NOT NULL
 );
-COMMENT ON TABLE professor IS 'Especialização 1:1 de pessoa [E2]; só o que é vínculo de trabalho.';
+COMMENT ON TABLE tb_professor IS 'Especialização 1:1 de pessoa [E2]; só o que é vínculo de trabalho.';
 
 -- [E6] a FK circular departamento↔professor entra agora, com UNIQUE (F4: um
 -- professor chefia no máximo um departamento; UNIQUE aceita vários NULLs).
-ALTER TABLE departamento
+ALTER TABLE tb_departamento
   ADD CONSTRAINT fk_departamento_chefe
-      FOREIGN KEY (id_professor_chefe) REFERENCES professor (id_professor),
+      FOREIGN KEY (id_professor_chefe) REFERENCES tb_professor (id_professor),
   ADD CONSTRAINT uq_departamento_chefe UNIQUE (id_professor_chefe);
 
-CREATE TABLE formacao_professor (
+CREATE TABLE tb_formacao_professor (
   id_formacao_professor            integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  id_professor                     integer      NOT NULL REFERENCES professor (id_professor) ON DELETE CASCADE,
+  id_professor                     integer      NOT NULL REFERENCES tb_professor (id_professor) ON DELETE CASCADE,
   curso_formacao_professor         varchar(120) NOT NULL,
   instituicao_formacao_professor   varchar(120) NOT NULL,
   ano_conclusao_formacao_professor smallint     NOT NULL CHECK (ano_conclusao_formacao_professor BETWEEN 1950 AND 2100),
   titulacao_formacao_professor     titulacao_t  NOT NULL,
   CONSTRAINT uq_formacao_prof UNIQUE (id_professor, curso_formacao_professor, instituicao_formacao_professor)
 );
-COMMENT ON TABLE formacao_professor IS 'Formações (multivalorado, 1FN) [E3]; a titulação declarada fica em professor.';
+COMMENT ON TABLE tb_formacao_professor IS 'Formações (multivalorado, 1FN) [E3]; a titulação declarada fica em professor.';
 
 -- ============================================================================
 -- 5. ESTRUTURA ACADÊMICA  [E7] [E8] [E15]
 -- ============================================================================
 
-CREATE TABLE curso (
+CREATE TABLE tb_curso (
   id_curso        smallint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  id_campus       smallint     NOT NULL REFERENCES campus (id_campus),
-  id_departamento smallint     NOT NULL REFERENCES departamento (id_departamento),
+  id_campus       smallint     NOT NULL REFERENCES tb_campus (id_campus),
+  id_departamento smallint     NOT NULL REFERENCES tb_departamento (id_departamento),
   codigo_curso    varchar(10)  NOT NULL UNIQUE,
   nome_curso      varchar(120) NOT NULL,
   ch_total_curso  integer      NOT NULL CHECK (ch_total_curso > 0),
   grau_curso      grau_curso_t NOT NULL,          -- era varchar+CHECK: rótulo fechado ⇒ ENUM [C12]
   modalidade_curso modalidade_t NOT NULL DEFAULT 'presencial'
 );
-COMMENT ON TABLE curso IS 'Cursos; ganham departamento [E6] e modalidade.';
+COMMENT ON TABLE tb_curso IS 'Cursos; ganham departamento [E6] e modalidade.';
 
-CREATE TABLE coordenacao_curso (
+CREATE TABLE tb_coordenacao_curso (
   id_coordenacao_curso       integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  id_curso                   smallint    NOT NULL REFERENCES curso (id_curso),
-  id_professor               integer     NOT NULL REFERENCES professor (id_professor),
+  id_curso                   smallint    NOT NULL REFERENCES tb_curso (id_curso),
+  id_professor               integer     NOT NULL REFERENCES tb_professor (id_professor),
   portaria_coordenacao_curso varchar(30),
   vigencia_coordenacao_curso daterange   NOT NULL CHECK (NOT isempty(vigencia_coordenacao_curso)),
   -- [E8] um coordenador por curso a cada instante — técnica de [C10], sem trigger.
@@ -303,22 +303,22 @@ CREATE TABLE coordenacao_curso (
   CONSTRAINT ex_coordenacao_vigencia EXCLUDE USING gist
     (id_curso WITH =, vigencia_coordenacao_curso WITH &&)
 );
-COMMENT ON TABLE coordenacao_curso IS 'Mandatos de coordenação; EXCLUDE de vigência [E8].';
+COMMENT ON TABLE tb_coordenacao_curso IS 'Mandatos de coordenação; EXCLUDE de vigência [E8].';
 
-CREATE TABLE curriculo (
+CREATE TABLE tb_curriculo (
   id_curriculo           integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  id_curso               smallint    NOT NULL REFERENCES curso (id_curso),
+  id_curso               smallint    NOT NULL REFERENCES tb_curso (id_curso),
   portaria_curriculo     varchar(30),
   ano_vigencia_curriculo smallint    NOT NULL CHECK (ano_vigencia_curriculo BETWEEN 1990 AND 2100),
   ativo_curriculo        boolean     NOT NULL DEFAULT true,
   CONSTRAINT uq_curriculo_curso_ano UNIQUE (id_curso, ano_vigencia_curriculo),   -- [C8]
   CONSTRAINT uq_curriculo_id_curso  UNIQUE (id_curriculo, id_curso)              -- alvo da FK composta [C6]
 );
-COMMENT ON TABLE curriculo IS 'Matrizes curriculares por ano [C8]; alvo de [C6].';
+COMMENT ON TABLE tb_curriculo IS 'Matrizes curriculares por ano [C8]; alvo de [C6].';
 
-CREATE TABLE disciplina (
+CREATE TABLE tb_disciplina (
   id_disciplina         integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  id_departamento       smallint     NOT NULL REFERENCES departamento (id_departamento),
+  id_departamento       smallint     NOT NULL REFERENCES tb_departamento (id_departamento),
   codigo_disciplina     varchar(10)  NOT NULL UNIQUE,
   nome_disciplina       varchar(120) NOT NULL,
   ementa_disciplina     text,
@@ -327,55 +327,71 @@ CREATE TABLE disciplina (
   ch_total_disciplina   smallint GENERATED ALWAYS AS (ch_teorica_disciplina + ch_pratica_disciplina) STORED,  -- [C13]
   CONSTRAINT ck_disciplina_ch_positiva CHECK (ch_teorica_disciplina + ch_pratica_disciplina > 0)
 );
-COMMENT ON TABLE disciplina IS 'Catálogo; ch_total é gerada [C13]; ementa é a descrição perene — o plano de ensino é a execução [E7].';
+COMMENT ON TABLE tb_disciplina IS 'Catálogo; ch_total é gerada [C13]; ementa é a descrição perene — o plano de ensino é a execução [E7].';
 
-CREATE TABLE curriculo_disciplina (
-  id_curriculo                 integer     NOT NULL REFERENCES curriculo (id_curriculo) ON DELETE CASCADE,
-  id_disciplina                integer     NOT NULL REFERENCES disciplina (id_disciplina),
+CREATE TABLE tb_curriculo_disciplina (
+  id_curriculo                 integer     NOT NULL REFERENCES tb_curriculo (id_curriculo) ON DELETE CASCADE,
+  id_disciplina                integer     NOT NULL REFERENCES tb_disciplina (id_disciplina),
   periodo_curriculo_disciplina smallint    NOT NULL CHECK (periodo_curriculo_disciplina BETWEEN 1 AND 12),
   tipo_curriculo_disciplina    tipo_disc_t NOT NULL DEFAULT 'obrigatoria',
   PRIMARY KEY (id_curriculo, id_disciplina)
 );
-COMMENT ON TABLE curriculo_disciplina IS 'Grade: período sugerido de cada disciplina no currículo.';
+COMMENT ON TABLE tb_curriculo_disciplina IS 'Grade: período sugerido de cada disciplina no currículo.';
 
-CREATE TABLE pre_requisito (
-  id_disciplina             integer   NOT NULL REFERENCES disciplina (id_disciplina) ON DELETE CASCADE,
-  id_requisito              integer   NOT NULL REFERENCES disciplina (id_disciplina) ON DELETE CASCADE,
-  ch_minima_pre_requisito   smallint  CHECK (ch_minima_pre_requisito > 0),  -- alternativa por CH acumulada
-  media_minima_pre_requisito nota_t   NOT NULL DEFAULT 5.00,
-  vinculo_pre_requisito     vinculo_t NOT NULL DEFAULT 'pre_requisito',
-  PRIMARY KEY (id_disciplina, id_requisito),
+-- [E17] O pré-requisito passa a pertencer ao CURRÍCULO, não ao catálogo.
+-- Antes, "BD2 exige BD1" valia para toda matriz de uma vez; mas a cadeia é
+-- decisão de cada matriz, e matrizes diferentes encadeiam diferente.
+-- As DUAS chaves compostas são o ponto: exigem que a disciplina E o requisito
+-- estejam ambos NAQUELE currículo. Apontar para matéria fora da matriz é
+-- impossível por restrição, sem trigger — a técnica de [C6] outra vez.
+-- `vinculo` saiu a pedido: o modelo expressa só pré-requisito. Consequência
+-- assumida: o co-requisito (LBD2 junto de BD2) deixa de ser representável.
+-- `ch_minima_pre_requisito` saiu junto — nunca foi usado por consulta nenhuma.
+CREATE TABLE tb_pre_requisito (
+  id_curriculo               integer NOT NULL,
+  id_disciplina              integer NOT NULL,
+  id_requisito               integer NOT NULL,
+  media_minima_pre_requisito nota_t  NOT NULL DEFAULT 5.00,
+  PRIMARY KEY (id_curriculo, id_disciplina, id_requisito),
+  CONSTRAINT fk_prereq_disciplina_do_curriculo
+    FOREIGN KEY (id_curriculo, id_disciplina)
+    REFERENCES tb_curriculo_disciplina (id_curriculo, id_disciplina) ON DELETE CASCADE,
+  CONSTRAINT fk_prereq_requisito_do_curriculo
+    FOREIGN KEY (id_curriculo, id_requisito)
+    REFERENCES tb_curriculo_disciplina (id_curriculo, id_disciplina),
   CONSTRAINT ck_prereq_nao_reflexivo CHECK (id_disciplina <> id_requisito)   -- [C7]
 );
-COMMENT ON TABLE pre_requisito IS 'id_disciplina EXIGE id_requisito, com média/CH mínimas por aresta; ciclos maiores: consulta recursiva [C7].';
+COMMENT ON TABLE tb_pre_requisito IS 'id_disciplina EXIGE id_requisito, com média/CH mínimas por aresta; ciclos maiores: consulta recursiva [C7].';
 
-CREATE TABLE aluno (
+CREATE TABLE tb_aluno (
   id_aluno             integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  id_pessoa            integer     NOT NULL UNIQUE REFERENCES pessoa (id_pessoa),
-  id_curso             smallint    NOT NULL REFERENCES curso (id_curso),
+  id_pessoa            integer     NOT NULL UNIQUE REFERENCES tb_pessoa (id_pessoa),
+  id_curso             smallint    NOT NULL REFERENCES tb_curso (id_curso),
   id_curriculo         integer     NOT NULL,
+  -- [E18] `ingresso_aluno` saiu: o RA já carrega o ano nos quatro primeiros
+  -- dígitos (20240036 = 2024), então a data era determinada por ele —
+  -- transitiva. Quem precisa do ano lê `left(matricula_aluno, 4)`.
   matricula_aluno      varchar(12) NOT NULL UNIQUE,
-  ingresso_aluno       date        NOT NULL,
   forma_ingresso_aluno forma_ingresso_t NOT NULL,
   status_aluno         status_aluno_t   NOT NULL DEFAULT 'ativo',
   -- [C6] o currículo do aluno tem que ser um currículo do curso do aluno.
   CONSTRAINT fk_aluno_curriculo_do_curso
-    FOREIGN KEY (id_curriculo, id_curso) REFERENCES curriculo (id_curriculo, id_curso)
+    FOREIGN KEY (id_curriculo, id_curso) REFERENCES tb_curriculo (id_curriculo, id_curso)
 );
-COMMENT ON TABLE aluno IS 'Especialização 1:1 de pessoa [E2]; fica só o vínculo acadêmico. [C6] mantido.';
+COMMENT ON TABLE tb_aluno IS 'Especialização 1:1 de pessoa [E2]; fica só o vínculo acadêmico. [C6] mantido.';
 -- Ambiguidade HERDADA do modelo do professor, registrada para quem vier depois:
 -- `matricula_aluno` é o RA (identificação do aluno na instituição, uma por aluno),
--- enquanto a TABELA `matricula` é a inscrição do aluno numa turma (muitas por aluno).
+-- enquanto a TABELA `tb_matricula` é a inscrição do aluno numa turma (muitas por aluno).
 -- São conceitos distintos com a mesma palavra. Renomear divergiria da convenção do
 -- professor, então o nome fica e a distinção é documentada aqui.
-COMMENT ON COLUMN aluno.matricula_aluno IS
+COMMENT ON COLUMN tb_aluno.matricula_aluno IS
   'RA: identificação do aluno na instituição. NÃO confundir com a tabela matricula (inscrição em turma).';
 
-CREATE TABLE aproveitamento_materia (
+CREATE TABLE tb_aproveitamento_materia (
   id_aproveitamento_materia               integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  id_aluno                                integer      NOT NULL REFERENCES aluno (id_aluno),
-  id_disciplina                           integer      NOT NULL REFERENCES disciplina (id_disciplina),
-  id_usuario_avaliador                    integer      REFERENCES usuario (id_usuario),
+  id_aluno                                integer      NOT NULL REFERENCES tb_aluno (id_aluno),
+  id_disciplina                           integer      NOT NULL REFERENCES tb_disciplina (id_disciplina),
+  id_usuario_avaliador                    integer      REFERENCES tb_usuario (id_usuario),
   disciplina_origem_aproveitamento_materia  varchar(120) NOT NULL,
   instituicao_origem_aproveitamento_materia varchar(120) NOT NULL,
   parecer_aproveitamento_materia          text,
@@ -388,13 +404,13 @@ CREATE TABLE aproveitamento_materia (
   -- Regras de deferimento cruzam tabela (CH da disciplina, forma de ingresso):
   -- ficam na função de deferimento, não em CHECK [E15].
 );
-COMMENT ON TABLE aproveitamento_materia IS 'Dispensa por estudo anterior [E15]; conta em pode_cursar().';
+COMMENT ON TABLE tb_aproveitamento_materia IS 'Dispensa por estudo anterior [E15]; conta em pode_cursar().';
 
 -- ============================================================================
 -- 6. TEMPO E CALENDÁRIO  [E9] [E10]
 -- ============================================================================
 
-CREATE TABLE periodo_letivo (
+CREATE TABLE tb_periodo_letivo (
   id_periodo_letivo          smallint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   ano_periodo_letivo         smallint NOT NULL,
   semestre_periodo_letivo    smallint NOT NULL CHECK (semestre_periodo_letivo IN (1, 2)),
@@ -403,11 +419,11 @@ CREATE TABLE periodo_letivo (
   CONSTRAINT uq_periodo_ano_semestre UNIQUE (ano_periodo_letivo, semestre_periodo_letivo),  -- [C3]
   CONSTRAINT ck_periodo_datas        CHECK (data_inicio_periodo_letivo < data_fim_periodo_letivo)
 );
-COMMENT ON TABLE periodo_letivo IS 'Semestres letivos [C3].';
+COMMENT ON TABLE tb_periodo_letivo IS 'Semestres letivos [C3].';
 
-CREATE TABLE periodo_matricula (
+CREATE TABLE tb_periodo_matricula (
   id_periodo_matricula        integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  id_periodo_letivo           smallint    NOT NULL REFERENCES periodo_letivo (id_periodo_letivo),
+  id_periodo_letivo           smallint    NOT NULL REFERENCES tb_periodo_letivo (id_periodo_letivo),
   descricao_periodo_matricula varchar(60) NOT NULL,
   janela_periodo_matricula    tstzrange   NOT NULL CHECK (NOT isempty(janela_periodo_matricula)),
   tipo_periodo_matricula      tipo_periodo_matricula_t NOT NULL,
@@ -416,17 +432,17 @@ CREATE TABLE periodo_matricula (
   CONSTRAINT ex_periodo_matricula_janela EXCLUDE USING gist
     (id_periodo_letivo WITH =, tipo_periodo_matricula WITH =, janela_periodo_matricula WITH &&)
 );
-COMMENT ON TABLE periodo_matricula IS 'QUANDO se pode matricular [E9]; a função de matrícula consulta now() <@ janela.';
+COMMENT ON TABLE tb_periodo_matricula IS 'QUANDO se pode matricular [E9]; a função de matrícula consulta now() <@ janela.';
 
-CREATE TABLE feriado (
+CREATE TABLE tb_feriado (
   id_feriado          integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   -- [E10] arco exclusivo: o ALCANCE do feriado é exatamente uma das 4 FKs.
   -- O ENUM de tipo foi REMOVIDO de propósito: seria derivável do arco
   -- (dependência funcional tipo↔FK — violaria 3FN); facultativo é ortogonal.
-  id_pais             smallint REFERENCES pais (id_pais),
-  id_estado           smallint REFERENCES estado (id_estado),
-  id_cidade           integer  REFERENCES cidade (id_cidade),
-  id_campus           smallint REFERENCES campus (id_campus),
+  id_pais             smallint REFERENCES tb_pais (id_pais),
+  id_estado           smallint REFERENCES tb_estado (id_estado),
+  id_cidade           integer  REFERENCES tb_cidade (id_cidade),
+  id_campus           smallint REFERENCES tb_campus (id_campus),
   descricao_feriado   varchar(120) NOT NULL,
   data_feriado        date         NOT NULL,
   facultativo_feriado boolean      NOT NULL DEFAULT false,
@@ -434,22 +450,22 @@ CREATE TABLE feriado (
     (id_pais   IS NOT NULL)::int + (id_estado IS NOT NULL)::int +
     (id_cidade IS NOT NULL)::int + (id_campus IS NOT NULL)::int = 1)
 );
-COMMENT ON TABLE feriado IS 'Alcance pelo arco de FKs [E10]; dedup por nível preserva [C9].';
+COMMENT ON TABLE tb_feriado IS 'Alcance pelo arco de FKs [E10]; dedup por nível preserva [C9].';
 -- [C9→E10] dedup por nível: sem isto, dois feriados nacionais na mesma data
 -- voltariam a passar — que era o erro original do modelo do professor.
-CREATE UNIQUE INDEX uq_feriado_pais_data   ON feriado (id_pais,   data_feriado) WHERE id_pais   IS NOT NULL;
-CREATE UNIQUE INDEX uq_feriado_estado_data ON feriado (id_estado, data_feriado) WHERE id_estado IS NOT NULL;
-CREATE UNIQUE INDEX uq_feriado_cidade_data ON feriado (id_cidade, data_feriado) WHERE id_cidade IS NOT NULL;
-CREATE UNIQUE INDEX uq_feriado_campus_data ON feriado (id_campus, data_feriado) WHERE id_campus IS NOT NULL;
+CREATE UNIQUE INDEX uq_feriado_pais_data   ON tb_feriado (id_pais,   data_feriado) WHERE id_pais   IS NOT NULL;
+CREATE UNIQUE INDEX uq_feriado_estado_data ON tb_feriado (id_estado, data_feriado) WHERE id_estado IS NOT NULL;
+CREATE UNIQUE INDEX uq_feriado_cidade_data ON tb_feriado (id_cidade, data_feriado) WHERE id_cidade IS NOT NULL;
+CREATE UNIQUE INDEX uq_feriado_campus_data ON tb_feriado (id_campus, data_feriado) WHERE id_campus IS NOT NULL;
 
 -- ============================================================================
 -- 7. OFERTA E DOCÊNCIA  [E11] [E12]
 -- ============================================================================
 
-CREATE TABLE turma (
+CREATE TABLE tb_turma (
   id_turma          integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  id_disciplina     integer     NOT NULL REFERENCES disciplina (id_disciplina),
-  id_periodo_letivo smallint    NOT NULL REFERENCES periodo_letivo (id_periodo_letivo),
+  id_disciplina     integer     NOT NULL REFERENCES tb_disciplina (id_disciplina),
+  id_periodo_letivo smallint    NOT NULL REFERENCES tb_periodo_letivo (id_periodo_letivo),
   codigo_turma      varchar(15) NOT NULL,
   vagas_turma       smallint    NOT NULL CHECK (vagas_turma >= 0),
   turno_turma       turno_t     NOT NULL,
@@ -459,32 +475,32 @@ CREATE TABLE turma (
   CONSTRAINT uq_turma_id_disciplina  UNIQUE (id_turma, id_disciplina)           -- alvo de [E7]
   -- id_professor SAIU → turma_professor [E11] (co-docência)
 );
-COMMENT ON TABLE turma IS 'Oferta; professor foi para turma_professor [E11].';
+COMMENT ON TABLE tb_turma IS 'Oferta; professor foi para turma_professor [E11].';
 
-CREATE TABLE turma_professor (
-  id_turma              integer  NOT NULL REFERENCES turma (id_turma),
-  id_professor          integer  NOT NULL REFERENCES professor (id_professor),
+CREATE TABLE tb_turma_professor (
+  id_turma              integer  NOT NULL REFERENCES tb_turma (id_turma),
+  id_professor          integer  NOT NULL REFERENCES tb_professor (id_professor),
   ch_turma_professor    smallint CHECK (ch_turma_professor > 0),
   papel_turma_professor papel_docente_t NOT NULL DEFAULT 'titular',
   PRIMARY KEY (id_turma, id_professor)
 );
-COMMENT ON TABLE turma_professor IS 'Co-docência [E11]; um titular por turma via índice parcial.';
-CREATE UNIQUE INDEX uq_turma_prof_titular ON turma_professor (id_turma)
+COMMENT ON TABLE tb_turma_professor IS 'Co-docência [E11]; um titular por turma via índice parcial.';
+CREATE UNIQUE INDEX uq_turma_prof_titular ON tb_turma_professor (id_turma)
   WHERE papel_turma_professor = 'titular';
 
-CREATE TABLE turma_horario (
+CREATE TABLE tb_turma_horario (
   id_turma_horario         integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   id_turma                 integer  NOT NULL,
   -- [C10] denormalização CONTROLADA: o período vem junto da turma via FK composta.
   id_periodo_letivo        smallint NOT NULL,
   -- [E12] sala ANULÁVEL: turma EAD tem horário sem sala física.
-  id_sala                  integer  REFERENCES sala (id_sala),
+  id_sala                  integer  REFERENCES tb_sala (id_sala),
   dia_semana_turma_horario smallint  NOT NULL CHECK (dia_semana_turma_horario BETWEEN 1 AND 7),
   faixa_turma_horario      timerange NOT NULL CHECK (NOT isempty(faixa_turma_horario)),   -- [C1]
   tipo_aula_turma_horario  tipo_aula_t NOT NULL DEFAULT 'teorica',
   CONSTRAINT fk_horario_turma_periodo
     FOREIGN KEY (id_turma, id_periodo_letivo)
-    REFERENCES turma (id_turma, id_periodo_letivo) ON DELETE CASCADE,
+    REFERENCES tb_turma (id_turma, id_periodo_letivo) ON DELETE CASCADE,
   CONSTRAINT uq_horario_id_turma UNIQUE (id_turma_horario, id_turma),   -- alvo de [E13]
   -- [C10] choque de sala só para quem TEM sala (EXCLUDE parcial, validado) [E12]
   CONSTRAINT ex_sala_sem_choque EXCLUDE USING gist (
@@ -494,7 +510,7 @@ CREATE TABLE turma_horario (
   CONSTRAINT ex_turma_sem_choque EXCLUDE USING gist (
     id_turma WITH =, dia_semana_turma_horario WITH =, faixa_turma_horario WITH &&)
 );
-COMMENT ON TABLE turma_horario IS 'Encontros semanais; sala NULL = EAD [E12]; alvo de [E13].';
+COMMENT ON TABLE tb_turma_horario IS 'Encontros semanais; sala NULL = EAD [E12]; alvo de [E13].';
 
 -- ============================================================================
 -- 8. PLANO DE ENSINO  [E7]
@@ -503,7 +519,7 @@ COMMENT ON TABLE turma_horario IS 'Encontros semanais; sala NULL = EAD [E12]; al
 --    id_turma preenchido = versão daquela oferta.
 -- ============================================================================
 
-CREATE TABLE plano_ensino (
+CREATE TABLE tb_plano_ensino (
   id_plano_ensino                 integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   id_disciplina                   integer NOT NULL,
   id_turma                        integer,
@@ -511,7 +527,7 @@ CREATE TABLE plano_ensino (
   metodologia_plano_ensino        text,
   criterio_avaliacao_plano_ensino text,
   aprovacao_plano_ensino          date,
-  CONSTRAINT fk_plano_disciplina FOREIGN KEY (id_disciplina) REFERENCES disciplina (id_disciplina),
+  CONSTRAINT fk_plano_disciplina FOREIGN KEY (id_disciplina) REFERENCES tb_disciplina (id_disciplina),
   -- [E7] técnica de [C9]: um único plano base (turma NULL) e no máximo uma
   -- versão por turma.
   CONSTRAINT uq_plano_disciplina_turma UNIQUE NULLS NOT DISTINCT (id_disciplina, id_turma),
@@ -519,22 +535,22 @@ CREATE TABLE plano_ensino (
   -- (com id_turma NULL a FK composta não é avaliada — MATCH SIMPLE — e o plano
   -- base passa; preenchida, o par é validado contra turma.)
   CONSTRAINT fk_plano_turma_da_disciplina
-    FOREIGN KEY (id_turma, id_disciplina) REFERENCES turma (id_turma, id_disciplina)
+    FOREIGN KEY (id_turma, id_disciplina) REFERENCES tb_turma (id_turma, id_disciplina)
 );
-COMMENT ON TABLE plano_ensino IS 'Da disciplina, com versão opcional por turma [E7]: técnicas de [C9] e [C6].';
+COMMENT ON TABLE tb_plano_ensino IS 'Da disciplina, com versão opcional por turma [E7]: técnicas de [C9] e [C6].';
 
-CREATE TABLE unidade_plano_ensino (
+CREATE TABLE tb_unidade_plano_ensino (
   id_unidade_plano_ensino        integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  id_plano_ensino                integer      NOT NULL REFERENCES plano_ensino (id_plano_ensino) ON DELETE CASCADE,
+  id_plano_ensino                integer      NOT NULL REFERENCES tb_plano_ensino (id_plano_ensino) ON DELETE CASCADE,
   titulo_unidade_plano_ensino    varchar(120) NOT NULL,
   conteudo_unidade_plano_ensino  text,
   ordem_unidade_plano_ensino     smallint NOT NULL CHECK (ordem_unidade_plano_ensino > 0),
   ch_unidade_plano_ensino        smallint NOT NULL CHECK (ch_unidade_plano_ensino > 0),
   CONSTRAINT uq_unidade_plano_ordem UNIQUE (id_plano_ensino, ordem_unidade_plano_ensino)
 );
-COMMENT ON TABLE unidade_plano_ensino IS 'Unidades do plano; soma de CH ≤ CH da disciplina fica em função [E7].';
+COMMENT ON TABLE tb_unidade_plano_ensino IS 'Unidades do plano; soma de CH ≤ CH da disciplina fica em função [E7].';
 
-CREATE TABLE bibliografia (
+CREATE TABLE tb_bibliografia (
   id_bibliografia      integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   titulo_bibliografia  varchar(200) NOT NULL,
   autor_bibliografia   varchar(120) NOT NULL,
@@ -543,63 +559,75 @@ CREATE TABLE bibliografia (
   ano_bibliografia     smallint CHECK (ano_bibliografia BETWEEN 1800 AND 2100),
   edicao_bibliografia  smallint CHECK (edicao_bibliografia > 0)
 );
-COMMENT ON TABLE bibliografia IS 'Obras; N:N com plano via plano_ensino_bibliografia.';
+COMMENT ON TABLE tb_bibliografia IS 'Obras; N:N com plano via plano_ensino_bibliografia.';
 
-CREATE TABLE plano_ensino_bibliografia (
-  id_plano_ensino               integer NOT NULL REFERENCES plano_ensino (id_plano_ensino) ON DELETE CASCADE,
-  id_bibliografia               integer NOT NULL REFERENCES bibliografia (id_bibliografia),
+CREATE TABLE tb_plano_ensino_bibliografia (
+  id_plano_ensino               integer NOT NULL REFERENCES tb_plano_ensino (id_plano_ensino) ON DELETE CASCADE,
+  id_bibliografia               integer NOT NULL REFERENCES tb_bibliografia (id_bibliografia),
   tipo_plano_ensino_bibliografia tipo_bibliografia_t NOT NULL,
   PRIMARY KEY (id_plano_ensino, id_bibliografia)
 );
-COMMENT ON TABLE plano_ensino_bibliografia IS 'Básica × complementar por plano.';
+COMMENT ON TABLE tb_plano_ensino_bibliografia IS 'Básica × complementar por plano.';
 
 -- ============================================================================
 -- 9. MATRÍCULA E HISTÓRICO  [C2] [C11] [E14]
 -- ============================================================================
 
-CREATE TABLE matricula (
+CREATE TABLE tb_matricula (
   id_matricula     integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  id_aluno         integer      NOT NULL REFERENCES aluno (id_aluno),
-  id_turma         integer      NOT NULL REFERENCES turma (id_turma),
+  id_aluno         integer      NOT NULL REFERENCES tb_aluno (id_aluno),
+  id_turma         integer      NOT NULL REFERENCES tb_turma (id_turma),
   data_matricula   timestamptz  NOT NULL DEFAULT now(),
-  -- DEFAULT 'confirmada' MANTIDO (achado F9): vw_vagas conta confirmadas e a
+  -- DEFAULT 'confirmada' MANTIDO (achado F9): vagas conta confirmadas e a
   -- demo da última vaga depende disso; o fluxo pendente→confirmada, quando
   -- existir, muda o default junto com a função de matrícula.
   status_matricula status_mat_t NOT NULL DEFAULT 'confirmada',
   CONSTRAINT uq_matricula_aluno_turma UNIQUE (id_aluno, id_turma),   -- [C2]
   CONSTRAINT uq_matricula_id_turma    UNIQUE (id_matricula, id_turma)  -- alvo de [E13]
 );
-COMMENT ON TABLE matricula IS 'Inscrição do aluno numa turma [C2] — uma linha por turma cursada, não confundir com aluno.matricula_aluno (o RA). Vaga consumida por confirmada; a disputa é o Marco 2.';
+COMMENT ON TABLE tb_matricula IS 'Inscrição do aluno numa turma [C2] — uma linha por turma cursada, não confundir com aluno.matricula_aluno (o RA). Vaga consumida por confirmada; a disputa é o Marco 2.';
 
-CREATE TABLE historico (
+CREATE TABLE tb_historico (
   id_historico              integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  id_matricula              integer NOT NULL UNIQUE REFERENCES matricula (id_matricula) ON DELETE CASCADE,
+  id_matricula              integer NOT NULL UNIQUE REFERENCES tb_matricula (id_matricula) ON DELETE CASCADE,
   data_fechamento_historico date,
   situacao_historico        situacao_t NOT NULL DEFAULT 'cursando'
   -- [E14] nota_a1/a2/p3, frequência e media_final SAÍRAM: agora derivam de
-  -- nota/presenca na MV mv_historico_consolidado (refresh ao fechar o período).
+  -- nota/presenca na MV historico_consolidado (refresh ao fechar o período).
   -- Custo assumido e registrado: o GENERATED de [C13] e o índice B-tree de 46×
   -- migram para a MV — que aceita índice e REFRESH CONCURRENTLY (validado).
 );
-COMMENT ON TABLE historico IS 'Consolidado 1:1 da matrícula [E14]; o registro fino vive em nota/presenca.';
+COMMENT ON TABLE tb_historico IS 'Consolidado 1:1 da matrícula [E14]; o registro fino vive em nota/presenca.';
 
-CREATE TABLE log_matricula (
-  id_log_matricula          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  -- [C11] SEM FK, de propósito: a trilha sobrevive ao expurgo da matrícula.
-  id_matricula              integer,
-  id_usuario                integer REFERENCES usuario (id_usuario),
-  ocorrido_em_log_matricula timestamptz NOT NULL DEFAULT now(),
-  acao_log_matricula        acao_log_t  NOT NULL,
-  detalhe_log_matricula     jsonb
+-- [E19] O log deixa de ser só da matrícula e passa a ser GENÉRICO: uma linha
+-- por alteração, em qualquer tabela auditada, gravada por trigger. Antes ele
+-- dependia da aplicação lembrar de inserir; agora quem grava é o banco, e
+-- "esquecer de logar" deixa de ser possível.
+--
+-- Nota para a arguição: isto NÃO contradiz o "zero triggers" do modelo. Aquilo
+-- vale para trigger de VALIDAÇÃO — regra de integridade que o banco já sabe
+-- declarar, e que em trigger vira código com desvio. Auditoria é o caso oposto:
+-- não há forma declarativa de dizer "registre quem mudou o quê", e o trigger é
+-- a ferramenta certa justamente por interceptar TODO caminho de escrita.
+CREATE TABLE tb_log_auditoria (
+  id_log_auditoria    bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  -- [C11] SEM FK para a linha auditada, de propósito: a trilha sobrevive ao
+  -- expurgo do dado. Auditoria que some junto com o auditado não é auditoria.
+  id_usuario          integer REFERENCES tb_usuario (id_usuario),
+  nome_tabela         name        NOT NULL,
+  acao_log            acao_log_t  NOT NULL,
+  ocorrido_em         timestamptz NOT NULL DEFAULT now(),
+  dados_antes         jsonb,
+  dados_depois        jsonb
 );
-COMMENT ON TABLE log_matricula IS 'Auditoria [C11]; id_usuario resolvido da sessão por f_usuario_sessao [E4].';
+COMMENT ON TABLE tb_log_auditoria IS 'Trilha de auditoria gravada por trigger [E19]; sem FK para o auditado [C11].';
 
 -- [E4] resolve a ROLE da sessão para usuario.id_usuario (NULL se não mapeada —
 -- o log nunca deixa de ser gravado por causa disso).
 CREATE FUNCTION f_usuario_sessao() RETURNS integer
   LANGUAGE sql STABLE
-  AS $$ SELECT id_usuario FROM academico.usuario WHERE login_usuario = current_user $$;
-ALTER TABLE log_matricula ALTER COLUMN id_usuario SET DEFAULT f_usuario_sessao();
+  AS $$ SELECT id_usuario FROM academico.tb_usuario WHERE login_usuario = current_user $$;
+ALTER TABLE tb_log_auditoria ALTER COLUMN id_usuario SET DEFAULT f_usuario_sessao();
 
 -- ============================================================================
 -- 10. AULA E AVALIAÇÃO  [E13] [E14]
@@ -607,10 +635,10 @@ ALTER TABLE log_matricula ALTER COLUMN id_usuario SET DEFAULT f_usuario_sessao()
 --     composta — a técnica de [C6]/[C10] pela terceira vez.
 -- ============================================================================
 
-CREATE TABLE aula (
+CREATE TABLE tb_aula (
   id_aula                 integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   id_turma_horario        integer NOT NULL,
-  id_unidade_plano_ensino integer REFERENCES unidade_plano_ensino (id_unidade_plano_ensino),
+  id_unidade_plano_ensino integer REFERENCES tb_unidade_plano_ensino (id_unidade_plano_ensino),
   -- [E13] denormalização controlada: a turma vem junto do horário via FK composta.
   id_turma                integer NOT NULL,
   conteudo_aula           text,
@@ -618,13 +646,13 @@ CREATE TABLE aula (
   realizada_aula          boolean NOT NULL DEFAULT true,
   CONSTRAINT fk_aula_horario_da_turma
     FOREIGN KEY (id_turma_horario, id_turma)
-    REFERENCES turma_horario (id_turma_horario, id_turma),
+    REFERENCES tb_turma_horario (id_turma_horario, id_turma),
   CONSTRAINT uq_aula_horario_data UNIQUE (id_turma_horario, data_aula),
   CONSTRAINT uq_aula_id_turma     UNIQUE (id_aula, id_turma)          -- alvo p/ presenca [E13]
 );
-COMMENT ON TABLE aula IS 'Encontros realizados; feriado × data fica em função [E13].';
+COMMENT ON TABLE tb_aula IS 'Encontros realizados; feriado × data fica em função [E13].';
 
-CREATE TABLE presenca (
+CREATE TABLE tb_presenca (
   id_aula              integer NOT NULL,
   id_matricula         integer NOT NULL,
   -- [E13] a MESMA turma amarra a aula e a matrícula: coerência por constraint.
@@ -633,15 +661,15 @@ CREATE TABLE presenca (
   justificada_presenca boolean NOT NULL DEFAULT false,
   PRIMARY KEY (id_aula, id_matricula),
   CONSTRAINT fk_presenca_aula_da_turma
-    FOREIGN KEY (id_aula, id_turma) REFERENCES aula (id_aula, id_turma),
+    FOREIGN KEY (id_aula, id_turma) REFERENCES tb_aula (id_aula, id_turma),
   CONSTRAINT fk_presenca_matricula_da_turma
-    FOREIGN KEY (id_matricula, id_turma) REFERENCES matricula (id_matricula, id_turma)
+    FOREIGN KEY (id_matricula, id_turma) REFERENCES tb_matricula (id_matricula, id_turma)
 );
-COMMENT ON TABLE presenca IS 'Presença por aula; aluno de outra turma é IMPOSSÍVEL por FK composta [E13].';
+COMMENT ON TABLE tb_presenca IS 'Presença por aula; aluno de outra turma é IMPOSSÍVEL por FK composta [E13].';
 
-CREATE TABLE avaliacao (
+CREATE TABLE tb_avaliacao (
   id_avaliacao           integer GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  id_turma               integer      NOT NULL REFERENCES turma (id_turma),
+  id_turma               integer      NOT NULL REFERENCES tb_turma (id_turma),
   nome_avaliacao         varchar(60)  NOT NULL,
   -- [E14] escala DECIDIDA: pesos somam 10.00 (coerente com nota_t 0–10);
   -- o teto fecha o achado F7. A soma exata por turma é conferida no fechamento.
@@ -651,50 +679,50 @@ CREATE TABLE avaliacao (
   CONSTRAINT uq_avaliacao_turma_nome UNIQUE (id_turma, nome_avaliacao),
   CONSTRAINT uq_avaliacao_id_turma   UNIQUE (id_avaliacao, id_turma)   -- alvo de [E13]
 );
-COMMENT ON TABLE avaliacao IS 'Avaliações por turma [E14]; substitutiva preserva a regra da P3 [C13].';
+COMMENT ON TABLE tb_avaliacao IS 'Avaliações por turma [E14]; substitutiva preserva a regra da P3 [C13].';
 
-CREATE TABLE nota (
+CREATE TABLE tb_nota (
   id_avaliacao integer NOT NULL,
   id_matricula integer NOT NULL,
   id_turma     integer NOT NULL,          -- [E13] mesma técnica da presenca
   valor_nota   nota_t  NOT NULL,
   PRIMARY KEY (id_avaliacao, id_matricula),
   CONSTRAINT fk_nota_avaliacao_da_turma
-    FOREIGN KEY (id_avaliacao, id_turma) REFERENCES avaliacao (id_avaliacao, id_turma),
+    FOREIGN KEY (id_avaliacao, id_turma) REFERENCES tb_avaliacao (id_avaliacao, id_turma),
   CONSTRAINT fk_nota_matricula_da_turma
-    FOREIGN KEY (id_matricula, id_turma) REFERENCES matricula (id_matricula, id_turma)
+    FOREIGN KEY (id_matricula, id_turma) REFERENCES tb_matricula (id_matricula, id_turma)
 );
-COMMENT ON TABLE nota IS 'Nota por avaliação; nota em avaliação de outra turma é IMPOSSÍVEL por FK composta [E13].';
+COMMENT ON TABLE tb_nota IS 'Nota por avaliação; nota em avaliação de outra turma é IMPOSSÍVEL por FK composta [E13].';
 
 -- ============================================================================
 -- 11. DERIVAÇÃO DO DESEMPENHO  [E14]
 --     Sucessora direta da coluna GERADA que a ampliação removeu de historico.
 --     Antes, media_final_historico era `GENERATED ALWAYS AS (...) STORED` sobre
 --     nota_a1/a2/p3 — três colunas fixas, 1FN disfarçada. Agora a nota vive em
---     `nota` (n linhas por matrícula) e a média é DERIVADA aqui, uma vez, para
+--     `tb_nota` (n linhas por matrícula) e a média é DERIVADA aqui, uma vez, para
 --     que consultas, views e a MV do 04 usem a MESMA regra.
 --
 --     A regra da P3 do modelo original é preservada: a avaliação SUBSTITUTIVA
 --     troca a MENOR nota regular, e só quando é maior que ela.
 --
 --     Direitos do DONO (sem security_invoker), de propósito: quem consulta
---     precisa enxergar `nota`/`presenca` inteiras para a agregação fechar. O
---     isolamento por aluno é feito uma camada acima, em v_historico_aluno
---     (security_invoker = on), que filtra por `matricula` — protegida por RLS.
+--     precisa enxergar `tb_nota`/`tb_presenca` inteiras para a agregação fechar. O
+--     isolamento por aluno é feito uma camada acima, em historico_aluno
+--     (security_invoker = on), que filtra por `tb_matricula` — protegida por RLS.
 --     Por isso esta view NÃO é concedida a papel_aluno (ver 08_seguranca.sql).
 -- ============================================================================
-CREATE VIEW v_desempenho_matricula AS
+CREATE VIEW vw_desempenho_matricula AS
 WITH regulares AS (
   SELECT n.id_matricula, n.valor_nota, av.peso_avaliacao,
          row_number() OVER (PARTITION BY n.id_matricula ORDER BY n.valor_nota, av.id_avaliacao) AS posicao
-  FROM nota n
-  JOIN avaliacao av ON av.id_avaliacao = n.id_avaliacao
+  FROM tb_nota n
+  JOIN tb_avaliacao av ON av.id_avaliacao = n.id_avaliacao
   WHERE NOT av.substitutiva_avaliacao
 ),
 substitutiva AS (
   SELECT n.id_matricula, max(n.valor_nota) AS valor_nota
-  FROM nota n
-  JOIN avaliacao av ON av.id_avaliacao = n.id_avaliacao
+  FROM tb_nota n
+  JOIN tb_avaliacao av ON av.id_avaliacao = n.id_avaliacao
   WHERE av.substitutiva_avaliacao
   GROUP BY n.id_matricula
 ),
@@ -714,7 +742,7 @@ frequencia AS (
          count(*)                                                AS aulas_previstas,
          count(*) FILTER (WHERE p.presente_presenca)             AS presencas,
          round(100.0 * count(*) FILTER (WHERE p.presente_presenca) / count(*), 2)::pct_t AS frequencia
-  FROM presenca p
+  FROM tb_presenca p
   GROUP BY p.id_matricula
 )
 SELECT m.id_matricula,
@@ -726,11 +754,86 @@ SELECT m.id_matricula,
        fq.aulas_previstas,
        fq.presencas,
        fq.frequencia
-FROM matricula m
+FROM tb_matricula m
 LEFT JOIN media md      ON md.id_matricula = m.id_matricula
 LEFT JOIN frequencia fq ON fq.id_matricula = m.id_matricula;
-COMMENT ON VIEW v_desempenho_matricula IS
+COMMENT ON VIEW vw_desempenho_matricula IS
   'Média final (com a regra da substitutiva) e frequência, derivadas de nota/presenca [E14]. Sucessora da coluna gerada [C13].';
+
+
+-- ============================================================================
+-- 12. AUDITORIA TRANSVERSAL  [E19]
+--     Três colunas em TODA tabela e dois triggers. É a única parte do modelo
+--     que se aplica por igual a todas as 41 — e por isso entra num laço, não
+--     copiada 41 vezes.
+-- ============================================================================
+
+-- criado_em / atualizado_em / excluido_em em todas as tabelas de dados.
+-- log_auditoria fica de fora: ela é append-only e já tem `ocorrido_em`;
+-- auditar a própria auditoria seria recursão sem ganho.
+DO $$
+DECLARE t text;
+BEGIN
+  FOR t IN SELECT tablename FROM pg_tables
+           WHERE schemaname = 'academico' AND tablename <> 'tb_log_auditoria'
+           ORDER BY tablename
+  LOOP
+    EXECUTE format(
+      'ALTER TABLE %I
+         ADD COLUMN criado_em     timestamptz NOT NULL DEFAULT now(),
+         ADD COLUMN atualizado_em timestamptz,
+         ADD COLUMN excluido_em   timestamptz', t);
+  END LOOP;
+END $$;
+
+COMMENT ON COLUMN tb_matricula.excluido_em IS
+  'Exclusão lógica: preenchida em vez de apagar a linha. NULL = ativa.';
+
+-- Marca a hora da última alteração. BEFORE UPDATE porque precisa alterar NEW
+-- antes da gravação — um AFTER não conseguiria.
+CREATE FUNCTION f_marca_atualizacao() RETURNS trigger
+  LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.atualizado_em := now();
+  RETURN NEW;
+END $$;
+
+-- Grava a trilha. AFTER e RETURN NULL: o trigger não interfere na operação,
+-- só registra o que já aconteceu. `to_jsonb(OLD/NEW)` guarda a linha inteira,
+-- então a trilha continua legível mesmo se a tabela ganhar colunas depois.
+CREATE FUNCTION f_auditoria() RETURNS trigger
+  LANGUAGE plpgsql AS $$
+BEGIN
+  INSERT INTO academico.tb_log_auditoria (nome_tabela, acao_log, dados_antes, dados_depois)
+  VALUES (TG_TABLE_NAME,
+          lower(TG_OP)::acao_log_t,
+          CASE WHEN TG_OP <> 'INSERT' THEN to_jsonb(OLD) END,
+          CASE WHEN TG_OP <> 'DELETE' THEN to_jsonb(NEW) END);
+  RETURN NULL;
+END $$;
+
+-- f_marca_atualizacao vale para todas; f_auditoria só para as tabelas onde
+-- "quem mudou o quê" é pergunta real. Auditar as 5.570 cidades do IBGE — dado
+-- de referência que ninguém edita — seria encher a trilha de ruído e esconder
+-- o que importa. As cinco escolhidas são as que guardam pessoa, vínculo e nota.
+DO $$
+DECLARE t text;
+BEGIN
+  FOR t IN SELECT tablename FROM pg_tables
+           WHERE schemaname = 'academico' AND tablename <> 'tb_log_auditoria'
+  LOOP
+    EXECUTE format(
+      'CREATE TRIGGER tg_%s_atualizacao BEFORE UPDATE ON %I
+         FOR EACH ROW EXECUTE FUNCTION f_marca_atualizacao()', t, t);
+  END LOOP;
+
+  FOREACH t IN ARRAY ARRAY['tb_pessoa','tb_aluno','tb_matricula','tb_nota','tb_historico']
+  LOOP
+    EXECUTE format(
+      'CREATE TRIGGER tg_%s_auditoria AFTER INSERT OR UPDATE OR DELETE ON %I
+         FOR EACH ROW EXECUTE FUNCTION f_auditoria()', t, t);
+  END LOOP;
+END $$;
 
 COMMIT;
 
@@ -792,14 +895,14 @@ BEGIN;
 -- Idempotência: limpa dados preservando o esquema. A ordem não importa por
 -- causa do CASCADE, mas a lista é explícita para que uma tabela nova nunca
 -- fique de fora silenciosamente.
-TRUNCATE pais, estado, cidade, endereco, pessoa, telefone, documento_pessoa,
-         usuario, campus, departamento, predio, sala, recurso, sala_recurso,
-         professor, formacao_professor, curso, coordenacao_curso, curriculo,
-         disciplina, curriculo_disciplina, pre_requisito, aluno,
-         aproveitamento_materia, periodo_letivo, periodo_matricula, feriado,
-         turma, turma_professor, turma_horario, plano_ensino,
-         unidade_plano_ensino, bibliografia, plano_ensino_bibliografia,
-         matricula, historico, log_matricula, aula, presenca, avaliacao, nota
+TRUNCATE tb_pais, tb_estado, tb_cidade, tb_endereco, tb_pessoa, tb_telefone, tb_documento_pessoa,
+         tb_usuario, tb_campus, tb_departamento, tb_predio, tb_sala, tb_recurso, tb_sala_recurso,
+         tb_professor, tb_formacao_professor, tb_curso, tb_coordenacao_curso, tb_curriculo,
+         tb_disciplina, tb_curriculo_disciplina, tb_pre_requisito, tb_aluno,
+         tb_aproveitamento_materia, tb_periodo_letivo, tb_periodo_matricula, tb_feriado,
+         tb_turma, tb_turma_professor, tb_turma_horario, tb_plano_ensino,
+         tb_unidade_plano_ensino, tb_bibliografia, tb_plano_ensino_bibliografia,
+         tb_matricula, tb_historico, tb_log_auditoria, tb_aula, tb_presenca, tb_avaliacao, tb_nota
 RESTART IDENTITY CASCADE;
 
 -- ============================================================================
@@ -808,16 +911,16 @@ RESTART IDENTITY CASCADE;
 --    cidade sem estado, nenhum estado sem país. É o fim do "Brasília" digitado
 --    à mão em cada campus.
 -- ============================================================================
-INSERT INTO pais (nome_pais, sigla_pais) VALUES ('Brasil', 'BR');
+INSERT INTO tb_pais (nome_pais, sigla_pais) VALUES ('Brasil', 'BR');
 
-INSERT INTO estado (id_pais, nome_estado, uf_estado)
+INSERT INTO tb_estado (id_pais, nome_estado, uf_estado)
 SELECT p.id_pais, v.nome, v.uf
 FROM (VALUES
   ('Distrito Federal', 'DF'), ('Goiás', 'GO'), ('Minas Gerais', 'MG'),
   ('São Paulo', 'SP'),        ('Bahia', 'BA')
-) AS v(nome, uf), pais p;
+) AS v(nome, uf), tb_pais p;
 
-INSERT INTO cidade (id_estado, nome_cidade, codigo_ibge_cidade)
+INSERT INTO tb_cidade (id_estado, nome_cidade, codigo_ibge_cidade)
 SELECT e.id_estado, v.nome, v.ibge
 FROM (VALUES
   ('DF', 'Brasília',        '5300108'),
@@ -830,24 +933,24 @@ FROM (VALUES
   ('SP', 'Campinas',        '3509502'),
   ('BA', 'Salvador',        '2927408')
 ) AS v(uf, nome, ibge)
-JOIN estado e ON e.uf_estado = v.uf;
+JOIN tb_estado e ON e.uf_estado = v.uf;
 
 -- Endereços institucionais (os dois campi)
-INSERT INTO endereco (id_cidade, logradouro_endereco, numero_endereco, complemento_endereco, bairro_endereco, cep_endereco)
+INSERT INTO tb_endereco (id_cidade, logradouro_endereco, numero_endereco, complemento_endereco, bairro_endereco, cep_endereco)
 SELECT c.id_cidade, v.log, v.num, v.compl, v.bairro, v.cep
 FROM (VALUES
   ('Brasília', 'SEPN 707/907', '1',   'Campus A',   'Asa Norte', '70790075'),
   ('Brasília', 'SGAS 613/614', '255', 'Campus B',   'Asa Sul',   '70200730')
-) AS v(cidade, log, num, compl, bairro, cep)
-JOIN cidade c ON c.nome_cidade = v.cidade;
+) AS v(tb_cidade, log, num, compl, bairro, cep)
+JOIN tb_cidade c ON c.nome_cidade = v.tb_cidade;
 
-INSERT INTO campus (id_endereco, nome_campus)
+INSERT INTO tb_campus (id_endereco, nome_campus)
 SELECT e.id_endereco, v.nome
 FROM (VALUES
   ('Campus B', 'Asa Sul'),
   ('Campus A', 'Asa Norte')
 ) AS v(compl, nome)
-JOIN endereco e ON e.complemento_endereco = v.compl;
+JOIN tb_endereco e ON e.complemento_endereco = v.compl;
 
 -- ============================================================================
 -- 2. PESSOAS  [E2]
@@ -868,7 +971,7 @@ WITH nomes AS (
 -- endereços residenciais: 1 por pessoa, distribuídos pelas cidades cadastradas
 -- (a maioria em Brasília, como manda a realidade de um campus do DF)
 ends AS (
-  INSERT INTO endereco (id_cidade, logradouro_endereco, numero_endereco, bairro_endereco, cep_endereco)
+  INSERT INTO tb_endereco (id_cidade, logradouro_endereco, numero_endereco, bairro_endereco, cep_endereco)
   SELECT c.id_cidade,
          'Quadra ' || (100 + g.i % 400) || ' Conjunto ' || chr(65 + g.i % 20),
          ((g.i * 7) % 900 + 1)::text,
@@ -877,7 +980,7 @@ ends AS (
          lpad((70000000 + (g.i * 137) % 900000)::text, 8, '0')
   FROM generate_series(1, 132) AS g(i)
   JOIN LATERAL (
-    SELECT id_cidade FROM cidade
+    SELECT id_cidade FROM tb_cidade
     ORDER BY CASE WHEN g.i % 10 < 7 THEN 0 ELSE 1 END,   -- 70% Brasília
              CASE WHEN g.i % 10 < 7 THEN 0 ELSE (id_cidade + g.i) % 9 END,
              id_cidade
@@ -885,7 +988,7 @@ ends AS (
   ) c ON true
   RETURNING id_endereco
 )
-INSERT INTO pessoa (id_endereco, nome_pessoa, email_pessoa, cpf_pessoa, nascimento_pessoa)
+INSERT INTO tb_pessoa (id_endereco, nome_pessoa, email_pessoa, cpf_pessoa, nascimento_pessoa)
 SELECT e.id_endereco, x.nome, x.email, x.cpf, x.nasc
 FROM (
   -- (a) 10 docentes — nomes fixos, os mesmos da carga anterior
@@ -927,63 +1030,63 @@ JOIN LATERAL (
                           ELSE 12 + x.ord END;
 
 -- Telefones [E3]: um celular principal para todos; fixo adicional a cada 3.
-INSERT INTO telefone (id_pessoa, numero_telefone, principal_telefone, tipo_telefone)
+INSERT INTO tb_telefone (id_pessoa, numero_telefone, principal_telefone, tipo_telefone)
 SELECT p.id_pessoa,
        '(61) 9' || lpad(((p.id_pessoa * 81721) % 100000000)::text, 8, '0'),
        true, 'celular'
-FROM pessoa p;
+FROM tb_pessoa p;
 
-INSERT INTO telefone (id_pessoa, numero_telefone, principal_telefone, tipo_telefone)
+INSERT INTO tb_telefone (id_pessoa, numero_telefone, principal_telefone, tipo_telefone)
 SELECT p.id_pessoa,
        '(61) 3' || lpad(((p.id_pessoa * 5417) % 10000000)::text, 7, '0'),
        false, 'residencial'
-FROM pessoa p
+FROM tb_pessoa p
 WHERE p.id_pessoa % 3 = 0;
 
 -- Documentos [E3]: RG para todos (o CPF NÃO entra aqui — é 1:1 com a pessoa
 -- e por isso vive em pessoa.cpf_pessoa [E2]); CNH para uma parte.
-INSERT INTO documento_pessoa (id_pessoa, numero_documento_pessoa, orgao_documento_pessoa, emissao_documento_pessoa, tipo_documento_pessoa)
+INSERT INTO tb_documento_pessoa (id_pessoa, numero_documento_pessoa, orgao_documento_pessoa, emissao_documento_pessoa, tipo_documento_pessoa)
 SELECT p.id_pessoa,
        lpad(((p.id_pessoa * 314159) % 10000000)::text, 7, '0'),
        (ARRAY['SSP/DF','SSP/GO','SSP/MG','SSP/SP','SSP/BA'])[1 + p.id_pessoa % 5],
        p.nascimento_pessoa + interval '18 years',
        'rg'
-FROM pessoa p;
+FROM tb_pessoa p;
 
-INSERT INTO documento_pessoa (id_pessoa, numero_documento_pessoa, orgao_documento_pessoa, emissao_documento_pessoa, tipo_documento_pessoa)
+INSERT INTO tb_documento_pessoa (id_pessoa, numero_documento_pessoa, orgao_documento_pessoa, emissao_documento_pessoa, tipo_documento_pessoa)
 SELECT p.id_pessoa,
        lpad(((p.id_pessoa * 2718281) % 100000000000)::text, 11, '0'),
        'DETRAN/DF',
        p.nascimento_pessoa + interval '20 years',
        'cnh'
-FROM pessoa p
+FROM tb_pessoa p
 WHERE p.id_pessoa % 5 = 0;
 
 -- ============================================================================
 -- 3. INFRAESTRUTURA  [E5] [E6]
 -- ============================================================================
-INSERT INTO departamento (id_campus, nome_departamento, sigla_departamento)
+INSERT INTO tb_departamento (id_campus, nome_departamento, sigla_departamento)
 SELECT c.id_campus, v.nome, v.sigla
 FROM (VALUES
   ('Asa Sul',   'Departamento de Ciência da Computação', 'DCC'),
   ('Asa Sul',   'Departamento de Matemática',            'DMAT'),
   ('Asa Norte', 'Departamento de Gestão',                'DGES')
-) AS v(campus, nome, sigla)
-JOIN campus c ON c.nome_campus = v.campus;
+) AS v(tb_campus, nome, sigla)
+JOIN tb_campus c ON c.nome_campus = v.tb_campus;
 
 -- [E5] sala não pertence mais ao campus direto: pertence ao PRÉDIO.
-INSERT INTO predio (id_campus, nome_predio, andares_predio)
+INSERT INTO tb_predio (id_campus, nome_predio, andares_predio)
 SELECT c.id_campus, v.nome, v.andares
 FROM (VALUES
   ('Asa Sul',   'Bloco A', 4),
   ('Asa Sul',   'Bloco B', 3),
   ('Asa Norte', 'Bloco Único', 5),
   ('Asa Norte', 'Anexo Laboratórios', 2)
-) AS v(campus, nome, andares)
-JOIN campus c ON c.nome_campus = v.campus;
+) AS v(tb_campus, nome, andares)
+JOIN tb_campus c ON c.nome_campus = v.tb_campus;
 
 -- "T101" existe nos DOIS campi: continua legal, agora por UNIQUE(predio, codigo) [C4→E5]
-INSERT INTO sala (id_predio, codigo_sala, andar_sala, capacidade_sala, tipo_sala)
+INSERT INTO tb_sala (id_predio, codigo_sala, andar_sala, capacidade_sala, tipo_sala)
 SELECT pr.id_predio, v.codigo, v.andar, v.cap, v.tipo::tipo_sala_t
 FROM (VALUES
   ('Asa Sul',   'Bloco A',            'T101', 1, 60,  'teorica'),
@@ -995,21 +1098,21 @@ FROM (VALUES
   ('Asa Norte', 'Bloco Único',        'T101', 1, 50,  'teorica'),
   ('Asa Norte', 'Bloco Único',        'T102', 1, 40,  'teorica'),
   ('Asa Norte', 'Anexo Laboratórios', 'L101', 1, 25,  'laboratorio')
-) AS v(campus, predio, codigo, andar, cap, tipo)
-JOIN campus c  ON c.nome_campus = v.campus
-JOIN predio pr ON pr.id_campus = c.id_campus AND pr.nome_predio = v.predio;
+) AS v(tb_campus, tb_predio, codigo, andar, cap, tipo)
+JOIN tb_campus c  ON c.nome_campus = v.tb_campus
+JOIN tb_predio pr ON pr.id_campus = c.id_campus AND pr.nome_predio = v.tb_predio;
 
-INSERT INTO recurso (nome_recurso) VALUES
+INSERT INTO tb_recurso (nome_recurso) VALUES
   ('Projetor multimídia'), ('Quadro branco'), ('Ar-condicionado'),
   ('Computadores'), ('Lousa digital');
 
 -- Recursos por sala: quadro em todas; projetor e ar na maioria; computadores
 -- só em laboratório (a regra que justifica a tabela existir).
-INSERT INTO sala_recurso (id_sala, id_recurso, quantidade_sala_recurso)
+INSERT INTO tb_sala_recurso (id_sala, id_recurso, quantidade_sala_recurso)
 SELECT s.id_sala, r.id_recurso,
        CASE r.nome_recurso WHEN 'Computadores' THEN s.capacidade_sala ELSE 1 END
-FROM sala s
-CROSS JOIN recurso r
+FROM tb_sala s
+CROSS JOIN tb_recurso r
 WHERE (r.nome_recurso = 'Quadro branco')
    OR (r.nome_recurso = 'Projetor multimídia' AND s.id_sala % 4 <> 0)
    OR (r.nome_recurso = 'Ar-condicionado'     AND s.id_sala % 3 <> 0)
@@ -1019,7 +1122,7 @@ WHERE (r.nome_recurso = 'Quadro branco')
 -- ============================================================================
 -- 4. DOCENTES  [E2] [E6]
 -- ============================================================================
-INSERT INTO professor (id_pessoa, id_departamento, matricula_professor, regime_professor, titulacao_professor)
+INSERT INTO tb_professor (id_pessoa, id_departamento, matricula_professor, regime_professor, titulacao_professor)
 SELECT p.id_pessoa, d.id_departamento, v.mat, v.regime::regime_professor_t, v.titulacao::titulacao_t
 FROM (VALUES
   ('marcos.tanaka@iesb.br',   'P0001', 'DCC',  'integral', 'doutorado'),
@@ -1033,15 +1136,15 @@ FROM (VALUES
   ('paulo.lima@iesb.br',      'P0009', 'DCC',  'parcial',  'mestrado'),
   ('helena.barros@iesb.br',   'P0010', 'DGES', 'horista',  'especializacao')
 ) AS v(email, mat, sigla, regime, titulacao)
-JOIN pessoa p       ON p.email_pessoa = v.email
-JOIN departamento d ON d.sigla_departamento = v.sigla;
+JOIN tb_pessoa p       ON p.email_pessoa = v.email
+JOIN tb_departamento d ON d.sigla_departamento = v.sigla;
 
 -- Formações [E3]: a graduação de todos, e a pós de quem tem título maior.
-INSERT INTO formacao_professor (id_professor, curso_formacao_professor, instituicao_formacao_professor, ano_conclusao_formacao_professor, titulacao_formacao_professor)
+INSERT INTO tb_formacao_professor (id_professor, curso_formacao_professor, instituicao_formacao_professor, ano_conclusao_formacao_professor, titulacao_formacao_professor)
 SELECT pr.id_professor, 'Ciência da Computação',
        (ARRAY['UnB','UFG','USP','UFMG','PUC'])[1 + pr.id_professor % 5],
        1995 + (pr.id_professor * 3) % 15, 'graduacao'
-FROM professor pr
+FROM tb_professor pr
 UNION ALL
 SELECT pr.id_professor,
        CASE pr.titulacao_professor WHEN 'doutorado' THEN 'Doutorado em Informática'
@@ -1049,13 +1152,13 @@ SELECT pr.id_professor,
                                    ELSE 'Especialização em Banco de Dados' END,
        (ARRAY['UnB','USP','UFRJ','UFPE','UNICAMP'])[1 + (pr.id_professor * 2) % 5],
        2008 + (pr.id_professor * 2) % 14, pr.titulacao_professor
-FROM professor pr
+FROM tb_professor pr
 WHERE pr.titulacao_professor <> 'graduacao';
 
 -- [E6] chefia: a FK circular criada por ALTER, com UNIQUE (um chefe por professor).
-UPDATE departamento d
+UPDATE tb_departamento d
 SET id_professor_chefe = pr.id_professor
-FROM professor pr, pessoa p
+FROM tb_professor pr, tb_pessoa p
 WHERE pr.id_pessoa = p.id_pessoa
   AND (d.sigla_departamento, p.email_pessoa) IN (
         ('DCC',  'marcos.tanaka@iesb.br'),
@@ -1068,56 +1171,56 @@ WHERE pr.id_pessoa = p.id_pessoa
 --    roles com exatamente estes nomes — e f_usuario_sessao() liga uma coisa
 --    à outra em tempo de execução, sem tabela de-para separada.
 -- ============================================================================
-INSERT INTO usuario (id_pessoa, login_usuario, papel_usuario)
+INSERT INTO tb_usuario (id_pessoa, login_usuario, papel_usuario)
 SELECT p.id_pessoa, v.login, v.papel::papel_usuario_t
 FROM (VALUES
   ('juliana.freitas@iesb.br', 'secretaria',  'secretaria'),
   ('gabriel.paz@iesb.br',     'bd2',         'admin'),        -- o DBA da disciplina
   ('marcos.tanaka@iesb.br',   'coordenacao', 'coordenacao')
 ) AS v(email, login, papel)
-JOIN pessoa p ON p.email_pessoa = v.email;
+JOIN tb_pessoa p ON p.email_pessoa = v.email;
 
 -- ============================================================================
 -- 6. CURSOS, CURRÍCULOS E DISCIPLINAS
 -- ============================================================================
-INSERT INTO curso (id_campus, id_departamento, codigo_curso, nome_curso, ch_total_curso, grau_curso, modalidade_curso)
+INSERT INTO tb_curso (id_campus, id_departamento, codigo_curso, nome_curso, ch_total_curso, grau_curso, modalidade_curso)
 SELECT c.id_campus, d.id_departamento, v.codigo, v.nome, v.ch,
        v.grau::grau_curso_t, v.modalidade::modalidade_t
 FROM (VALUES
   ('CC',  'Ciência da Computação',                 3200, 'bacharelado', 'Asa Sul',   'DCC',  'presencial'),
   ('SI',  'Sistemas de Informação',                3000, 'bacharelado', 'Asa Sul',   'DCC',  'presencial'),
   ('ADS', 'Análise e Desenvolvimento de Sistemas', 2400, 'tecnologo',   'Asa Norte', 'DGES', 'hibrido')
-) AS v(codigo, nome, ch, grau, campus, sigla, modalidade)
-JOIN campus c       ON c.nome_campus = v.campus
-JOIN departamento d ON d.sigla_departamento = v.sigla;
+) AS v(codigo, nome, ch, grau, tb_campus, sigla, modalidade)
+JOIN tb_campus c       ON c.nome_campus = v.tb_campus
+JOIN tb_departamento d ON d.sigla_departamento = v.sigla;
 
 -- [E8] coordenação COM VIGÊNCIA: o EXCLUDE gist garante um coordenador por
 -- curso a cada instante. O mandato encerrado de CC prova que o histórico cabe
 -- na mesma tabela — o que uma coluna id_coordenador em curso não permitiria.
-INSERT INTO coordenacao_curso (id_curso, id_professor, portaria_coordenacao_curso, vigencia_coordenacao_curso)
+INSERT INTO tb_coordenacao_curso (id_curso, id_professor, portaria_coordenacao_curso, vigencia_coordenacao_curso)
 SELECT c.id_curso, pr.id_professor, v.portaria, v.vig
 FROM (VALUES
   ('CC',  'P0004', 'PORT-2021-014', daterange(DATE '2021-01-01', DATE '2024-01-01', '[)')),
   ('CC',  'P0001', 'PORT-2024-003', daterange(DATE '2024-01-01', NULL, '[)')),
   ('SI',  'P0005', 'PORT-2023-021', daterange(DATE '2023-03-01', NULL, '[)')),
   ('ADS', 'P0010', 'PORT-2022-008', daterange(DATE '2022-08-01', NULL, '[)'))
-) AS v(curso, prof, portaria, vig)
-JOIN curso c     ON c.codigo_curso = v.curso
-JOIN professor pr ON pr.matricula_professor = v.prof;
+) AS v(tb_curso, prof, portaria, vig)
+JOIN tb_curso c     ON c.codigo_curso = v.tb_curso
+JOIN tb_professor pr ON pr.matricula_professor = v.prof;
 
-INSERT INTO curriculo (id_curso, portaria_curriculo, ano_vigencia_curriculo, ativo_curriculo)
+INSERT INTO tb_curriculo (id_curso, portaria_curriculo, ano_vigencia_curriculo, ativo_curriculo)
 SELECT c.id_curso, v.portaria, v.ano, v.ativo
 FROM (VALUES
   ('CC',  'RES-2023-091', 2024, false),   -- matriz antiga (ingressantes 2024/2025)
   ('CC',  'RES-2025-112', 2026, true),    -- matriz vigente
   ('SI',  'RES-2024-077', 2025, true),
   ('ADS', 'RES-2024-078', 2025, true)
-) AS v(curso, portaria, ano, ativo)
-JOIN curso c ON c.codigo_curso = v.curso;
+) AS v(tb_curso, portaria, ano, ativo)
+JOIN tb_curso c ON c.codigo_curso = v.tb_curso;
 
 -- Catálogo de disciplinas — ch_total é coluna GERADA [C13], não se insere.
 -- Cada disciplina agora tem DONO (departamento) [E6] e ementa.
-INSERT INTO disciplina (id_departamento, codigo_disciplina, nome_disciplina, ementa_disciplina, ch_teorica_disciplina, ch_pratica_disciplina)
+INSERT INTO tb_disciplina (id_departamento, codigo_disciplina, nome_disciplina, ementa_disciplina, ch_teorica_disciplina, ch_pratica_disciplina)
 SELECT d.id_departamento, v.codigo, v.nome,
        'Ementa de ' || v.nome || '. Conteúdo programático detalhado no plano de ensino vigente.',
        v.teo, v.pra
@@ -1143,31 +1246,16 @@ FROM (VALUES
   ('DCC',  'WEB1',  'Desenvolvimento Web',                  30, 60),
   ('DMAT', 'EST1',  'Probabilidade e Estatística',          60,  0)
 ) AS v(sigla, codigo, nome, teo, pra)
-JOIN departamento d ON d.sigla_departamento = v.sigla;
+JOIN tb_departamento d ON d.sigla_departamento = v.sigla;
 
--- Cadeia de pré-requisitos (profundidade 4: TABD -> BD2 -> BD1 -> ED1 -> ALG1)
--- e um co-requisito (LBD2 acompanha BD2) — exercitados nas consultas 5 e 6.
-INSERT INTO pre_requisito (id_disciplina, id_requisito, vinculo_pre_requisito)
-SELECT d.id_disciplina, r.id_disciplina, v.vinculo::vinculo_t
-FROM (VALUES
-  ('ED1',   'ALG1', 'pre_requisito'),
-  ('POO1',  'ALG1', 'pre_requisito'),
-  ('LFA',   'MAT1', 'pre_requisito'),
-  ('BD1',   'ED1',  'pre_requisito'),
-  ('SO1',   'ED1',  'pre_requisito'),
-  ('IA1',   'ED1',  'pre_requisito'),
-  ('IA1',   'MAT1', 'pre_requisito'),
-  ('BD2',   'BD1',  'pre_requisito'),
-  ('ENG1',  'POO1', 'pre_requisito'),
-  ('COMP1', 'LFA',  'pre_requisito'),
-  ('COMP1', 'ED1',  'pre_requisito'),
-  ('TABD',  'BD2',  'pre_requisito'),
-  ('LBD2',  'BD2',  'co_requisito')
-) AS v(disc, req, vinculo)
-JOIN disciplina d ON d.codigo_disciplina = v.disc
-JOIN disciplina r ON r.codigo_disciplina = v.req;
-
-INSERT INTO curriculo_disciplina (id_curriculo, id_disciplina, periodo_curriculo_disciplina, tipo_curriculo_disciplina)
+-- [E17] Cadeia de pré-requisitos, agora POR CURRÍCULO.
+-- Profundidade 4 na matriz de CC: TABD -> BD2 -> BD1 -> ED1 -> ALG1.
+-- O INSERT roda depois da grade (curriculo_disciplina) porque as duas FKs
+-- compostas exigem que disciplina e requisito já estejam naquela matriz — e
+-- é justamente isso que o modelo passou a garantir.
+-- O co-requisito LBD2/BD2 saiu junto com a coluna `vinculo`.
+-- Fica logo abaixo do bloco da grade.
+INSERT INTO tb_curriculo_disciplina (id_curriculo, id_disciplina, periodo_curriculo_disciplina, tipo_curriculo_disciplina)
 SELECT cu.id_curriculo, d.id_disciplina, v.periodo, v.tipo::tipo_disc_t
 FROM (VALUES
   -- CC 2026 (vigente)
@@ -1202,15 +1290,40 @@ FROM (VALUES
   ('ADS', 2025, 'POO1', 2, 'obrigatoria'), ('ADS', 2025, 'WEB1', 2, 'obrigatoria'),
   ('ADS', 2025, 'BD1',  3, 'obrigatoria'), ('ADS', 2025, 'RED1', 3, 'obrigatoria'),
   ('ADS', 2025, 'GPI',  4, 'obrigatoria'), ('ADS', 2025, 'EMP',  4, 'eletiva')
-) AS v(curso, ano, disc, periodo, tipo)
-JOIN curso c      ON c.codigo_curso = v.curso
-JOIN curriculo cu ON cu.id_curso = c.id_curso AND cu.ano_vigencia_curriculo = v.ano
-JOIN disciplina d ON d.codigo_disciplina = v.disc;
+) AS v(tb_curso, ano, disc, periodo, tipo)
+JOIN tb_curso c      ON c.codigo_curso = v.tb_curso
+JOIN tb_curriculo cu ON cu.id_curso = c.id_curso AND cu.ano_vigencia_curriculo = v.ano
+JOIN tb_disciplina d ON d.codigo_disciplina = v.disc;
+
+-- A mesma aresta vale em toda matriz onde as DUAS matérias existem. O último
+-- JOIN é o que garante isso: se o requisito não está naquele currículo, a
+-- linha simplesmente não é gerada — espelhando a restrição que o modelo impõe.
+INSERT INTO tb_pre_requisito (id_curriculo, id_disciplina, id_requisito)
+SELECT cd.id_curriculo, d.id_disciplina, r.id_disciplina
+FROM (VALUES
+  ('ED1',   'ALG1'),
+  ('POO1',  'ALG1'),
+  ('LFA',   'MAT1'),
+  ('BD1',   'ED1'),
+  ('SO1',   'ED1'),
+  ('IA1',   'ED1'),
+  ('IA1',   'MAT1'),
+  ('BD2',   'BD1'),
+  ('ENG1',  'POO1'),
+  ('COMP1', 'LFA'),
+  ('COMP1', 'ED1'),
+  ('TABD',  'BD2')
+) AS v(disc, req)
+JOIN tb_disciplina d ON d.codigo_disciplina = v.disc
+JOIN tb_disciplina r ON r.codigo_disciplina = v.req
+JOIN tb_curriculo_disciplina cd ON cd.id_disciplina = d.id_disciplina
+JOIN tb_curriculo_disciplina cr ON cr.id_curriculo = cd.id_curriculo
+                               AND cr.id_disciplina = r.id_disciplina;
 
 -- ============================================================================
 -- 7. CALENDÁRIO  [E9] [E10]
 -- ============================================================================
-INSERT INTO periodo_letivo (ano_periodo_letivo, semestre_periodo_letivo, data_inicio_periodo_letivo, data_fim_periodo_letivo) VALUES
+INSERT INTO tb_periodo_letivo (ano_periodo_letivo, semestre_periodo_letivo, data_inicio_periodo_letivo, data_fim_periodo_letivo) VALUES
   (2025, 1, DATE '2025-02-03', DATE '2025-07-05'),
   (2025, 2, DATE '2025-08-04', DATE '2025-12-20'),
   (2026, 1, DATE '2026-02-02', DATE '2026-07-04'),
@@ -1219,13 +1332,13 @@ INSERT INTO periodo_letivo (ano_periodo_letivo, semestre_periodo_letivo, data_in
 -- [E9] janelas de matrícula: o EXCLUDE gist impede duas janelas do MESMO tipo
 -- se sobreporem no mesmo período. Tipos diferentes PODEM conviver — e convivem:
 -- o ajuste começa antes de a matrícula terminar, de propósito.
-INSERT INTO periodo_matricula (id_periodo_letivo, descricao_periodo_matricula, janela_periodo_matricula, tipo_periodo_matricula)
+INSERT INTO tb_periodo_matricula (id_periodo_letivo, descricao_periodo_matricula, janela_periodo_matricula, tipo_periodo_matricula)
 SELECT pl.id_periodo_letivo, v.descricao,
        tstzrange(
          (pl.data_inicio_periodo_letivo + v.ini)::timestamptz,
          (pl.data_inicio_periodo_letivo + v.fim)::timestamptz, '[)'),
        v.tipo::tipo_periodo_matricula_t
-FROM periodo_letivo pl
+FROM tb_periodo_letivo pl
 CROSS JOIN (VALUES
   ('Matrícula regular',   -30, -10, 'matricula'),
   ('Rematrícula',         -45, -30, 'rematricula'),
@@ -1235,7 +1348,7 @@ CROSS JOIN (VALUES
 
 -- [E10] feriado por ARCO EXCLUSIVO: exatamente uma das 4 FKs preenchida.
 -- O "tipo" (nacional/estadual/…) NÃO é coluna: seria derivável do arco (3FN).
-INSERT INTO feriado (id_pais, descricao_feriado, data_feriado, facultativo_feriado)
+INSERT INTO tb_feriado (id_pais, descricao_feriado, data_feriado, facultativo_feriado)
 SELECT p.id_pais, v.descricao, v.data::date, v.facultativo
 FROM (VALUES
   ('2026-09-07', 'Independência do Brasil',    false),
@@ -1248,24 +1361,24 @@ FROM (VALUES
   ('2025-11-15', 'Proclamação da República',   false),
   ('2026-02-16', 'Carnaval',                   true),
   ('2026-04-03', 'Sexta-feira Santa',          false)
-) AS v(data, descricao, facultativo), pais p;
+) AS v(data, descricao, facultativo), tb_pais p;
 
-INSERT INTO feriado (id_estado, descricao_feriado, data_feriado, facultativo_feriado)
+INSERT INTO tb_feriado (id_estado, descricao_feriado, data_feriado, facultativo_feriado)
 SELECT e.id_estado, 'Dia do Evangélico (DF)', DATE '2026-11-30', false
-FROM estado e WHERE e.uf_estado = 'DF';
+FROM tb_estado e WHERE e.uf_estado = 'DF';
 
-INSERT INTO feriado (id_cidade, descricao_feriado, data_feriado, facultativo_feriado)
+INSERT INTO tb_feriado (id_cidade, descricao_feriado, data_feriado, facultativo_feriado)
 SELECT c.id_cidade, 'Aniversário de Brasília', DATE '2026-04-21', false
-FROM cidade c WHERE c.nome_cidade = 'Brasília';
+FROM tb_cidade c WHERE c.nome_cidade = 'Brasília';
 
-INSERT INTO feriado (id_campus, descricao_feriado, data_feriado, facultativo_feriado)
+INSERT INTO tb_feriado (id_campus, descricao_feriado, data_feriado, facultativo_feriado)
 SELECT c.id_campus, 'Dia do Folclore — evento interno', DATE '2026-08-22', true
-FROM campus c WHERE c.nome_campus = 'Asa Norte';
+FROM tb_campus c WHERE c.nome_campus = 'Asa Norte';
 
 -- ============================================================================
 -- 8. TURMAS, DOCÊNCIA E HORÁRIOS  [E11] [E12]
 -- ============================================================================
-INSERT INTO turma (id_disciplina, id_periodo_letivo, codigo_turma, vagas_turma, turno_turma, modalidade_turma)
+INSERT INTO tb_turma (id_disciplina, id_periodo_letivo, codigo_turma, vagas_turma, turno_turma, modalidade_turma)
 SELECT d.id_disciplina, pl.id_periodo_letivo, v.codigo, v.vagas,
        v.turno::turno_t, v.modalidade::modalidade_t
 FROM (VALUES
@@ -1308,17 +1421,17 @@ FROM (VALUES
   (2026, 2, 'LBD2',  'LBD2-N1',  'noturno',  20, 'ead'),         -- EAD: sem sala [E12]
   (2026, 2, 'WEB1',  'WEB1-M1',  'matutino', 30, 'presencial')
 ) AS v(ano, sem, disc, codigo, turno, vagas, modalidade)
-JOIN periodo_letivo pl ON pl.ano_periodo_letivo = v.ano AND pl.semestre_periodo_letivo = v.sem
-JOIN disciplina d      ON d.codigo_disciplina = v.disc;
+JOIN tb_periodo_letivo pl ON pl.ano_periodo_letivo = v.ano AND pl.semestre_periodo_letivo = v.sem
+JOIN tb_disciplina d      ON d.codigo_disciplina = v.disc;
 
 -- [E11] co-docência: o titular (um só por turma, garantido por índice parcial
 -- único) e, nas turmas com prática, um auxiliar. Era uma coluna id_professor
 -- em turma; virou tabela porque a realidade tem mais de um docente.
-INSERT INTO turma_professor (id_turma, id_professor, ch_turma_professor, papel_turma_professor)
+INSERT INTO tb_turma_professor (id_turma, id_professor, ch_turma_professor, papel_turma_professor)
 SELECT t.id_turma, pr.id_professor, d.ch_total_disciplina, 'titular'
-FROM turma t
-JOIN disciplina d ON d.id_disciplina = t.id_disciplina
-JOIN professor pr ON pr.matricula_professor = (CASE d.codigo_disciplina
+FROM tb_turma t
+JOIN tb_disciplina d ON d.id_disciplina = t.id_disciplina
+JOIN tb_professor pr ON pr.matricula_professor = (CASE d.codigo_disciplina
         WHEN 'ALG1'  THEN 'P0001' WHEN 'MAT1'  THEN 'P0002' WHEN 'ED1'   THEN 'P0003'
         WHEN 'POO1'  THEN 'P0004' WHEN 'BD1'   THEN 'P0005' WHEN 'ETI'   THEN 'P0006'
         WHEN 'SO1'   THEN 'P0007' WHEN 'LFA'   THEN 'P0008' WHEN 'EST1'  THEN 'P0002'
@@ -1328,13 +1441,13 @@ JOIN professor pr ON pr.matricula_professor = (CASE d.codigo_disciplina
         WHEN 'GPI'   THEN 'P0010' ELSE 'P0009' END);
 
 -- auxiliar nas turmas com carga prática (o laboratório precisa de dois)
-INSERT INTO turma_professor (id_turma, id_professor, ch_turma_professor, papel_turma_professor)
+INSERT INTO tb_turma_professor (id_turma, id_professor, ch_turma_professor, papel_turma_professor)
 SELECT t.id_turma, pr.id_professor, d.ch_pratica_disciplina, 'auxiliar'
-FROM turma t
-JOIN disciplina d ON d.id_disciplina = t.id_disciplina AND d.ch_pratica_disciplina >= 30
+FROM tb_turma t
+JOIN tb_disciplina d ON d.id_disciplina = t.id_disciplina AND d.ch_pratica_disciplina >= 30
 JOIN LATERAL (
-  SELECT p2.id_professor FROM professor p2
-  WHERE p2.id_professor <> (SELECT tp.id_professor FROM turma_professor tp
+  SELECT p2.id_professor FROM tb_professor p2
+  WHERE p2.id_professor <> (SELECT tp.id_professor FROM tb_turma_professor tp
                             WHERE tp.id_turma = t.id_turma AND tp.papel_turma_professor = 'titular')
   ORDER BY (p2.id_professor + t.id_turma) % 10, p2.id_professor
   LIMIT 1
@@ -1353,11 +1466,11 @@ WITH t AS (
   SELECT tu.id_turma, tu.id_periodo_letivo, tu.turno_turma, tu.modalidade_turma,
          row_number() OVER (PARTITION BY tu.id_periodo_letivo, tu.turno_turma
                             ORDER BY tu.codigo_turma) - 1 AS rn
-  FROM turma tu
+  FROM tb_turma tu
 ), s AS (
-  SELECT id_sala, row_number() OVER (ORDER BY id_sala) - 1 AS sn FROM sala
+  SELECT id_sala, row_number() OVER (ORDER BY id_sala) - 1 AS sn FROM tb_sala
 )
-INSERT INTO turma_horario (id_turma, id_periodo_letivo, id_sala, dia_semana_turma_horario, faixa_turma_horario, tipo_aula_turma_horario)
+INSERT INTO tb_turma_horario (id_turma, id_periodo_letivo, id_sala, dia_semana_turma_horario, faixa_turma_horario, tipo_aula_turma_horario)
 SELECT t.id_turma, t.id_periodo_letivo,
        CASE WHEN t.modalidade_turma = 'ead' THEN NULL ELSE s.id_sala END,
        d.dia,
@@ -1369,8 +1482,8 @@ SELECT t.id_turma, t.id_periodo_letivo,
        END AS faixa,
        CASE WHEN d.ord = 2 AND dd.ch_pratica_disciplina > 0 THEN 'pratica' ELSE 'teorica' END::tipo_aula_t
 FROM t
-JOIN turma tu     ON tu.id_turma = t.id_turma
-JOIN disciplina dd ON dd.id_disciplina = tu.id_disciplina
+JOIN tb_turma tu     ON tu.id_turma = t.id_turma
+JOIN tb_disciplina dd ON dd.id_disciplina = tu.id_disciplina
 JOIN s ON s.sn = t.rn % 9                                   -- 9 salas cadastradas
 CROSS JOIN LATERAL (VALUES
   (1, CASE WHEN t.rn % 2 = 0 THEN 1 ELSE 2 END),            -- seg ou ter
@@ -1384,7 +1497,7 @@ CROSS JOIN LATERAL (VALUES
 --    para uma turma DAQUELA disciplina. UNIQUE NULLS NOT DISTINCT impede um
 --    segundo plano base [técnica de C9].
 -- ============================================================================
-INSERT INTO plano_ensino (id_disciplina, id_turma, objetivo_plano_ensino, metodologia_plano_ensino, criterio_avaliacao_plano_ensino, aprovacao_plano_ensino)
+INSERT INTO tb_plano_ensino (id_disciplina, id_turma, objetivo_plano_ensino, metodologia_plano_ensino, criterio_avaliacao_plano_ensino, aprovacao_plano_ensino)
 SELECT d.id_disciplina, NULL,
        'Capacitar o estudante em ' || d.nome_disciplina || ', articulando teoria e prática.',
        CASE WHEN d.ch_pratica_disciplina > 0
@@ -1392,35 +1505,35 @@ SELECT d.id_disciplina, NULL,
             ELSE 'Aulas expositivas dialogadas, estudos dirigidos e seminários.' END,
        'Duas avaliações (A1 peso 4, A2 peso 6) e prova substitutiva conforme regimento.',
        DATE '2025-01-15'
-FROM disciplina d;
+FROM tb_disciplina d;
 
 -- Versão de turma para as ofertas de 2026/2 de BD2 e TABD: é o caso que
 -- justifica id_turma na tabela — o mesmo plano base, adaptado à oferta.
-INSERT INTO plano_ensino (id_disciplina, id_turma, objetivo_plano_ensino, metodologia_plano_ensino, criterio_avaliacao_plano_ensino, aprovacao_plano_ensino)
+INSERT INTO tb_plano_ensino (id_disciplina, id_turma, objetivo_plano_ensino, metodologia_plano_ensino, criterio_avaliacao_plano_ensino, aprovacao_plano_ensino)
 SELECT t.id_disciplina, t.id_turma,
        'Versão 2026/2 do plano de ' || d.nome_disciplina || ': ênfase em PostgreSQL 17.',
        'Aulas expositivas, laboratório com contêiner Docker e projeto em dupla.',
        'A1 (peso 4) sobre modelagem; A2 (peso 6) sobre implementação; substitutiva conforme regimento.',
        DATE '2026-07-20'
-FROM turma t
-JOIN disciplina d      ON d.id_disciplina = t.id_disciplina
-JOIN periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
+FROM tb_turma t
+JOIN tb_disciplina d      ON d.id_disciplina = t.id_disciplina
+JOIN tb_periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
 WHERE pl.ano_periodo_letivo = 2026 AND pl.semestre_periodo_letivo = 2
   AND d.codigo_disciplina IN ('BD2', 'TABD');
 
 -- Unidades do plano base: 4 por disciplina, somando a CH total da disciplina.
-INSERT INTO unidade_plano_ensino (id_plano_ensino, titulo_unidade_plano_ensino, conteudo_unidade_plano_ensino, ordem_unidade_plano_ensino, ch_unidade_plano_ensino)
+INSERT INTO tb_unidade_plano_ensino (id_plano_ensino, titulo_unidade_plano_ensino, conteudo_unidade_plano_ensino, ordem_unidade_plano_ensino, ch_unidade_plano_ensino)
 SELECT pe.id_plano_ensino,
        'Unidade ' || u.ord || ' — ' || d.codigo_disciplina,
        'Conteúdo da unidade ' || u.ord || ' de ' || d.nome_disciplina || '.',
        u.ord,
        (d.ch_total_disciplina / 4) + CASE WHEN u.ord <= d.ch_total_disciplina % 4 THEN 1 ELSE 0 END
-FROM plano_ensino pe
-JOIN disciplina d ON d.id_disciplina = pe.id_disciplina
+FROM tb_plano_ensino pe
+JOIN tb_disciplina d ON d.id_disciplina = pe.id_disciplina
 CROSS JOIN generate_series(1, 4) AS u(ord)
 WHERE pe.id_turma IS NULL;
 
-INSERT INTO bibliografia (titulo_bibliografia, autor_bibliografia, editora_bibliografia, isbn_bibliografia, ano_bibliografia, edicao_bibliografia) VALUES
+INSERT INTO tb_bibliografia (titulo_bibliografia, autor_bibliografia, editora_bibliografia, isbn_bibliografia, ano_bibliografia, edicao_bibliografia) VALUES
   ('Sistemas de Banco de Dados',            'Elmasri, R.; Navathe, S.', 'Pearson',       '9788579361852', 2011, 6),
   ('Sistema de Banco de Dados',             'Silberschatz, A.',         'Elsevier',      '9788535245356', 2012, 6),
   ('Projeto de Banco de Dados',             'Heuser, C. A.',            'Bookman',       '9788577803828', 2009, 6),
@@ -1436,12 +1549,12 @@ INSERT INTO bibliografia (titulo_bibliografia, autor_bibliografia, editora_bibli
 
 -- Bibliografia por plano: uma básica e uma complementar, escolhidas de forma
 -- determinística — a chave (plano, bibliografia) impede repetir o mesmo título.
-INSERT INTO plano_ensino_bibliografia (id_plano_ensino, id_bibliografia, tipo_plano_ensino_bibliografia)
+INSERT INTO tb_plano_ensino_bibliografia (id_plano_ensino, id_bibliografia, tipo_plano_ensino_bibliografia)
 SELECT pe.id_plano_ensino, b.id_bibliografia, v.tipo::tipo_bibliografia_t
-FROM plano_ensino pe
+FROM tb_plano_ensino pe
 CROSS JOIN (VALUES ('basica', 0), ('complementar', 5)) AS v(tipo, deslo)
 JOIN LATERAL (
-  SELECT id_bibliografia FROM bibliografia
+  SELECT id_bibliografia FROM tb_bibliografia
   ORDER BY ((id_bibliografia + pe.id_plano_ensino + v.deslo) % 12), id_bibliografia
   LIMIT 1
 ) b ON true
@@ -1453,10 +1566,10 @@ ON CONFLICT (id_plano_ensino, id_bibliografia) DO NOTHING;
 --     120 alunos, cada um apontando para a pessoa já criada. O currículo é
 --     coerente com o curso — a FK composta [C6] exige.
 -- ============================================================================
-INSERT INTO aluno (id_pessoa, id_curso, id_curriculo, matricula_aluno, ingresso_aluno, forma_ingresso_aluno, status_aluno)
+INSERT INTO tb_aluno (id_pessoa, id_curso, id_curriculo, matricula_aluno, forma_ingresso_aluno, status_aluno)
 SELECT p.id_pessoa, c.id_curso, cu.id_curriculo,
+       -- o RA carrega o ano de ingresso: 2024 * 10000 + i  ->  "20240036" [E18]
        (b.ano_ing * 10000 + b.i)::text,
-       make_date(b.ano_ing, 2, 1),
        (ARRAY['vestibular','enem','transferencia','portador_diploma'])[1 + b.i % 4]::forma_ingresso_t,
        CASE WHEN b.i % 17 = 0 THEN 'trancado' ELSE 'ativo' END::status_aluno_t
 FROM (
@@ -1476,9 +1589,9 @@ FROM (
                      'Almeida','Nascimento','Lima','Araujo','Fernandes','Carvalho',
                      'Gomes','Martins']                                AS sn) n
 ) b
-JOIN pessoa p ON p.email_pessoa = b.email
-JOIN curso c  ON c.codigo_curso = b.curso_cod
-JOIN curriculo cu
+JOIN tb_pessoa p ON p.email_pessoa = b.email
+JOIN tb_curso c  ON c.codigo_curso = b.curso_cod
+JOIN tb_curriculo cu
   ON cu.id_curso = c.id_curso
  AND cu.ano_vigencia_curriculo = CASE
        WHEN b.curso_cod = 'CC' AND b.ano_ing >= 2026 THEN 2026
@@ -1487,9 +1600,9 @@ JOIN curriculo cu
 
 -- Um usuário por aluno [E4]: login = 'al_' || RA, o mesmo nome que o
 -- 08_seguranca.sql dá à ROLE. É essa igualdade que a RLS usa.
-INSERT INTO usuario (id_pessoa, login_usuario, ativo_usuario, papel_usuario)
+INSERT INTO tb_usuario (id_pessoa, login_usuario, ativo_usuario, papel_usuario)
 SELECT a.id_pessoa, 'al_' || a.matricula_aluno, (a.status_aluno = 'ativo'), 'aluno'
-FROM aluno a;
+FROM tb_aluno a;
 
 -- ============================================================================
 -- 11. MATRÍCULAS
@@ -1502,12 +1615,13 @@ WITH pool AS (
   SELECT tu.id_turma AS id_turma, tu.codigo_turma, tu.vagas_turma, tu.id_periodo_letivo,
          tu.id_disciplina, a.id_aluno AS id_aluno, pl.data_inicio_periodo_letivo,
          (a.id_aluno * 31 + tu.id_turma * 17) % 997 AS h
-  FROM turma tu
-  JOIN periodo_letivo pl       ON pl.id_periodo_letivo = tu.id_periodo_letivo
-  JOIN curriculo_disciplina cd ON cd.id_disciplina = tu.id_disciplina
-  JOIN aluno a                 ON a.id_curriculo = cd.id_curriculo
+  FROM tb_turma tu
+  JOIN tb_periodo_letivo pl       ON pl.id_periodo_letivo = tu.id_periodo_letivo
+  JOIN tb_curriculo_disciplina cd ON cd.id_disciplina = tu.id_disciplina
+  JOIN tb_aluno a                 ON a.id_curriculo = cd.id_curriculo
                               AND a.status_aluno = 'ativo'
-                              AND a.ingresso_aluno <= pl.data_inicio_periodo_letivo
+                              -- ano de ingresso vem do RA [E18]
+                              AND left(a.matricula_aluno, 4)::int <= pl.ano_periodo_letivo
   WHERE tu.codigo_turma <> 'COMP1-N1'          -- deixada vazia de propósito (consulta 3)
 ),
 sem_duplicata AS (                       -- 1 turma por (aluno, período, disciplina)
@@ -1522,7 +1636,7 @@ ranqueado AS (
   FROM sem_duplicata
   WHERE r1 = 1
 )
-INSERT INTO matricula (id_aluno, id_turma, data_matricula, status_matricula)
+INSERT INTO tb_matricula (id_aluno, id_turma, data_matricula, status_matricula)
 SELECT r.id_aluno,
        r.id_turma,
        (r.data_inicio_periodo_letivo - 10)::timestamptz + make_interval(hours => (r.rk * 3)::int),
@@ -1544,11 +1658,11 @@ WHERE r.rk <= CASE WHEN r.codigo_turma = 'TABD-N1'
 --     avaliações REGULARES somam 10; a substitutiva não entra na soma —
 --     ela SUBSTITUI a de menor nota, que é a regra da P3 do modelo original.
 -- ============================================================================
-INSERT INTO avaliacao (id_turma, nome_avaliacao, peso_avaliacao, data_avaliacao, substitutiva_avaliacao)
+INSERT INTO tb_avaliacao (id_turma, nome_avaliacao, peso_avaliacao, data_avaliacao, substitutiva_avaliacao)
 SELECT t.id_turma, v.nome, v.peso,
        pl.data_inicio_periodo_letivo + v.dia, v.subst
-FROM turma t
-JOIN periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
+FROM tb_turma t
+JOIN tb_periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
 CROSS JOIN (VALUES
   ('A1', 4.00,  60, false),
   ('A2', 6.00, 120, false),
@@ -1557,18 +1671,18 @@ CROSS JOIN (VALUES
 
 -- Notas: só para períodos ENCERRADOS (< 2026/2) e matrículas confirmadas.
 -- As fórmulas são as mesmas da carga anterior — a média continua reproduzível.
-INSERT INTO nota (id_avaliacao, id_matricula, id_turma, valor_nota)
+INSERT INTO tb_nota (id_avaliacao, id_matricula, id_turma, valor_nota)
 SELECT av.id_avaliacao, m.id_matricula, m.id_turma,
        CASE av.nome_avaliacao
          WHEN 'A1' THEN round((3   + ((m.id_aluno * 37 + m.id_turma * 11) % 71) / 10.0)::numeric, 1)
          WHEN 'A2' THEN round((3.5 + ((m.id_aluno * 29 + m.id_turma * 13) % 66) / 10.0)::numeric, 1)
          ELSE           round((4   + ((m.id_aluno * 41 + m.id_turma * 7)  % 56) / 10.0)::numeric, 1)
        END
-FROM matricula m
-JOIN turma tu          ON tu.id_turma = m.id_turma
-JOIN periodo_letivo pl ON pl.id_periodo_letivo = tu.id_periodo_letivo
+FROM tb_matricula m
+JOIN tb_turma tu          ON tu.id_turma = m.id_turma
+JOIN tb_periodo_letivo pl ON pl.id_periodo_letivo = tu.id_periodo_letivo
                       AND (pl.ano_periodo_letivo, pl.semestre_periodo_letivo) < (2026, 2)
-JOIN avaliacao av      ON av.id_turma = m.id_turma
+JOIN tb_avaliacao av      ON av.id_turma = m.id_turma
 WHERE m.status_matricula = 'confirmada'
   AND (
     NOT av.substitutiva_avaliacao                       -- A1 e A2 para todos
@@ -1585,14 +1699,14 @@ WHERE m.status_matricula = 'confirmada'
 --     Aula pula feriado — a regra que o modelo do professor não conseguia
 --     expressar porque não tinha aula nenhuma.
 -- ============================================================================
-INSERT INTO aula (id_turma_horario, id_unidade_plano_ensino, id_turma, conteudo_aula, data_aula, realizada_aula)
+INSERT INTO tb_aula (id_turma_horario, id_unidade_plano_ensino, id_turma, conteudo_aula, data_aula, realizada_aula)
 SELECT th.id_turma_horario, u.id_unidade_plano_ensino, th.id_turma,
        'Encontro ' || dt.n || ' — ' || d.codigo_disciplina,
        dt.data, true
-FROM turma_horario th
-JOIN turma t           ON t.id_turma = th.id_turma
-JOIN disciplina d      ON d.id_disciplina = t.id_disciplina
-JOIN periodo_letivo pl ON pl.id_periodo_letivo = th.id_periodo_letivo
+FROM tb_turma_horario th
+JOIN tb_turma t           ON t.id_turma = th.id_turma
+JOIN tb_disciplina d      ON d.id_disciplina = t.id_disciplina
+JOIN tb_periodo_letivo pl ON pl.id_periodo_letivo = th.id_periodo_letivo
 CROSS JOIN LATERAL (
   -- 18 semanas a partir do primeiro dia da semana pedido pelo horário
   SELECT row_number() OVER (ORDER BY g.d) AS n, g.d AS data
@@ -1604,14 +1718,14 @@ CROSS JOIN LATERAL (
 ) dt
 LEFT JOIN LATERAL (                                  -- distribui as 4 unidades
   SELECT ue.id_unidade_plano_ensino
-  FROM plano_ensino pe
-  JOIN unidade_plano_ensino ue ON ue.id_plano_ensino = pe.id_plano_ensino
+  FROM tb_plano_ensino pe
+  JOIN tb_unidade_plano_ensino ue ON ue.id_plano_ensino = pe.id_plano_ensino
   WHERE pe.id_disciplina = t.id_disciplina AND pe.id_turma IS NULL
     AND ue.ordem_unidade_plano_ensino = LEAST(4, 1 + ((dt.n - 1) / 5))
   LIMIT 1
 ) u ON true
 WHERE NOT EXISTS (                                   -- não há aula em feriado
-  SELECT 1 FROM feriado f
+  SELECT 1 FROM tb_feriado f
   WHERE f.data_feriado = dt.data AND NOT f.facultativo_feriado
 );
 
@@ -1620,7 +1734,7 @@ WHERE NOT EXISTS (                                   -- não há aula em feriado
 -- propósito: a maioria falta ~5% (aprova por frequência) e um em cada 11
 -- alunos falta ~33% — abaixo dos 75% exigidos. É esse grupo que faz existir
 -- a situação 'reprovado_frequencia', usada pelas consultas 4 e 10.
-INSERT INTO presenca (id_aula, id_matricula, id_turma, presente_presenca, justificada_presenca)
+INSERT INTO tb_presenca (id_aula, id_matricula, id_turma, presente_presenca, justificada_presenca)
 SELECT a.id_aula, m.id_matricula, m.id_turma,
        CASE WHEN m.id_aluno % 11 = 0
             THEN ((m.id_aluno * 7 + a.id_aula * 3) % 3)  <> 0
@@ -1628,10 +1742,10 @@ SELECT a.id_aula, m.id_matricula, m.id_turma,
        CASE WHEN m.id_aluno % 11 = 0
             THEN ((m.id_aluno * 7 + a.id_aula * 3) % 3)  = 0 AND (m.id_aluno % 4 = 0)
             ELSE ((m.id_aluno * 7 + a.id_aula * 3) % 20) = 0 AND (m.id_aluno % 4 = 0) END
-FROM aula a
-JOIN matricula m       ON m.id_turma = a.id_turma AND m.status_matricula = 'confirmada'
-JOIN turma t           ON t.id_turma = a.id_turma
-JOIN periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
+FROM tb_aula a
+JOIN tb_matricula m       ON m.id_turma = a.id_turma AND m.status_matricula = 'confirmada'
+JOIN tb_turma t           ON t.id_turma = a.id_turma
+JOIN tb_periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
                       AND (pl.ano_periodo_letivo, pl.semestre_periodo_letivo) < (2026, 2);
 
 -- ============================================================================
@@ -1641,7 +1755,7 @@ JOIN periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
 --     é esse o custo assumido da ampliação, e a MV do 04_views.sql é a
 --     resposta a ele.
 -- ============================================================================
-INSERT INTO historico (id_matricula, data_fechamento_historico, situacao_historico)
+INSERT INTO tb_historico (id_matricula, data_fechamento_historico, situacao_historico)
 SELECT m.id_matricula,
        CASE WHEN x.encerrado THEN pl.data_fim_periodo_letivo END,
        CASE
@@ -1651,13 +1765,13 @@ SELECT m.id_matricula,
          WHEN x.media >= 5                    THEN 'aprovado'
          ELSE 'reprovado_nota'
        END::situacao_t
-FROM matricula m
-JOIN turma tu          ON tu.id_turma = m.id_turma
-JOIN periodo_letivo pl ON pl.id_periodo_letivo = tu.id_periodo_letivo
+FROM tb_matricula m
+JOIN tb_turma tu          ON tu.id_turma = m.id_turma
+JOIN tb_periodo_letivo pl ON pl.id_periodo_letivo = tu.id_periodo_letivo
 -- média e frequência vêm da MESMA view que as consultas usam
--- (v_desempenho_matricula, criada no 01_ddl.sql [E14]): a regra da
+-- (desempenho_matricula, criada no 01_ddl.sql [E14]): a regra da
 -- substitutiva não pode divergir entre a carga e o relatório.
-LEFT JOIN v_desempenho_matricula dm ON dm.id_matricula = m.id_matricula
+LEFT JOIN vw_desempenho_matricula dm ON dm.id_matricula = m.id_matricula
 CROSS JOIN LATERAL (
   SELECT (pl.ano_periodo_letivo, pl.semestre_periodo_letivo) < (2026, 2) AS encerrado,
          dm.media_final AS media,
@@ -1670,7 +1784,7 @@ WHERE m.status_matricula <> 'cancelada';
 --     Dispensa por estudo anterior: entra como 2ª via de "pode cursar".
 --     Um caso de cada status, para as consultas terem o que mostrar.
 -- ============================================================================
-INSERT INTO aproveitamento_materia (id_aluno, id_disciplina, id_usuario_avaliador,
+INSERT INTO tb_aproveitamento_materia (id_aluno, id_disciplina, id_usuario_avaliador,
        disciplina_origem_aproveitamento_materia, instituicao_origem_aproveitamento_materia,
        parecer_aproveitamento_materia, ch_origem_aproveitamento_materia,
        nota_origem_aproveitamento_materia, solicitacao_aproveitamento_materia,
@@ -1692,39 +1806,22 @@ FROM (VALUES
   ('SIG',  'indeferido', 4), ('EST1', 'indeferido', 5),
   ('WEB1', 'pendente',   6), ('GPI',  'pendente',   7), ('ALG1', 'pendente',   8)
 ) AS v(disc, status, ord)
-JOIN disciplina d ON d.codigo_disciplina = v.disc
+JOIN tb_disciplina d ON d.codigo_disciplina = v.disc
 JOIN LATERAL (
-  SELECT id_aluno FROM aluno WHERE status_aluno = 'ativo'
+  SELECT id_aluno FROM tb_aluno WHERE status_aluno = 'ativo'
   ORDER BY (id_aluno * 13 + v.ord) % 97, id_aluno LIMIT 1
 ) a ON true
-LEFT JOIN usuario u ON u.login_usuario = 'secretaria'
+LEFT JOIN tb_usuario u ON u.login_usuario = 'secretaria'
 ON CONFLICT (id_aluno, id_disciplina) DO NOTHING;
 
 -- ============================================================================
 -- 16. AUDITORIA  [C11] [E4]
---     acao_log_t é DML ('insert'/'update'/'delete'): o QUE aconteceu com a
---     LINHA. O evento de negócio ("matrícula criada", "status alterado") vai
---     no jsonb — que é justamente o que o índice GIN do 06_indices.sql explora.
---     id_usuario tem DEFAULT f_usuario_sessao(); aqui é passado explicitamente
---     porque a carga fala em nome do administrador.
+--     [E19] A carga NÃO insere no log: os triggers de auditoria já gravaram
+--     uma linha por INSERT em pessoa, aluno, matricula, nota e
+--     historico enquanto os blocos acima rodavam. Inserir à mão aqui
+--     duplicaria a trilha — e a diferença entre "a aplicação lembrou de logar"
+--     e "o banco logou" é justamente o ponto da mudança.
 -- ============================================================================
-INSERT INTO log_matricula (id_matricula, id_usuario, ocorrido_em_log_matricula, acao_log_matricula, detalhe_log_matricula)
-SELECT m.id_matricula, u.id_usuario, m.data_matricula, 'insert',
-       jsonb_build_object('evento', 'matricula_criada', 'turma', tu.codigo_turma,
-                          'origem', 'carga_inicial', 'status_inicial', 'confirmada')
-FROM matricula m
-JOIN turma tu ON tu.id_turma = m.id_turma
-LEFT JOIN usuario u ON u.login_usuario = 'bd2';
-
-INSERT INTO log_matricula (id_matricula, id_usuario, ocorrido_em_log_matricula, acao_log_matricula, detalhe_log_matricula)
-SELECT m.id_matricula, u.id_usuario, m.data_matricula + interval '5 days', 'update',
-       jsonb_build_object('evento', 'status_alterado', 'turma', tu.codigo_turma,
-                          'origem', 'carga_inicial',
-                          'de', 'confirmada', 'para', m.status_matricula::text)
-FROM matricula m
-JOIN turma tu ON tu.id_turma = m.id_turma
-LEFT JOIN usuario u ON u.login_usuario = 'bd2'
-WHERE m.status_matricula IN ('trancada', 'cancelada');
 
 COMMIT;
 
@@ -1737,19 +1834,19 @@ DECLARE
   n_alunos int; n_turmas int; n_matriculas int; n_vagas_tabd int;
   n_notas int; n_presencas int; n_aulas int; n_comp1 int; n_ead int;
 BEGIN
-  SELECT count(*) INTO n_alunos     FROM aluno;
-  SELECT count(*) INTO n_turmas     FROM turma;
-  SELECT count(*) INTO n_matriculas FROM matricula;
-  SELECT count(*) INTO n_notas      FROM nota;
-  SELECT count(*) INTO n_presencas  FROM presenca;
-  SELECT count(*) INTO n_aulas      FROM aula;
+  SELECT count(*) INTO n_alunos     FROM tb_aluno;
+  SELECT count(*) INTO n_turmas     FROM tb_turma;
+  SELECT count(*) INTO n_matriculas FROM tb_matricula;
+  SELECT count(*) INTO n_notas      FROM tb_nota;
+  SELECT count(*) INTO n_presencas  FROM tb_presenca;
+  SELECT count(*) INTO n_aulas      FROM tb_aula;
   SELECT t.vagas_turma - count(m.id_matricula) FILTER (WHERE m.status_matricula = 'confirmada')
     INTO n_vagas_tabd
-  FROM turma t LEFT JOIN matricula m ON m.id_turma = t.id_turma
+  FROM tb_turma t LEFT JOIN tb_matricula m ON m.id_turma = t.id_turma
   WHERE t.codigo_turma = 'TABD-N1' GROUP BY t.vagas_turma;
-  SELECT count(*) INTO n_comp1 FROM matricula m JOIN turma t ON t.id_turma = m.id_turma
+  SELECT count(*) INTO n_comp1 FROM tb_matricula m JOIN tb_turma t ON t.id_turma = m.id_turma
    WHERE t.codigo_turma = 'COMP1-N1';
-  SELECT count(*) INTO n_ead FROM turma_horario th JOIN turma t ON t.id_turma = th.id_turma
+  SELECT count(*) INTO n_ead FROM tb_turma_horario th JOIN tb_turma t ON t.id_turma = th.id_turma
    WHERE t.codigo_turma = 'LBD2-N1' AND th.id_sala IS NULL;
 
   IF n_alunos     < 100 THEN RAISE EXCEPTION 'Carga insuficiente: % alunos (mínimo 100)', n_alunos; END IF;
@@ -1759,7 +1856,7 @@ BEGIN
   IF n_comp1 <> 0       THEN RAISE EXCEPTION 'Cenário da junção externa quebrado: COMP1-N1 tem % matrículas (esperado 0)', n_comp1; END IF;
   IF n_ead   <  1       THEN RAISE EXCEPTION 'Cenário EAD quebrado: LBD2-N1 sem horário de sala NULL'; END IF;
   IF n_notas      < 500 THEN RAISE EXCEPTION 'Poucas notas: %', n_notas; END IF;
-  IF NOT EXISTS (SELECT 1 FROM historico WHERE situacao_historico = 'reprovado_frequencia')
+  IF NOT EXISTS (SELECT 1 FROM tb_historico WHERE situacao_historico = 'reprovado_frequencia')
     THEN RAISE EXCEPTION 'Cenário de frequência quebrado: ninguém reprovou por falta'; END IF;
   IF n_presencas  < 5000 THEN RAISE EXCEPTION 'Poucas presenças: %', n_presencas; END IF;
 
@@ -1769,47 +1866,47 @@ BEGIN
 END $$;
 
 \echo '=== Resumo da carga (41 tabelas) ==='
-SELECT 'pais' AS tabela, count(*) FROM pais                          UNION ALL
-SELECT 'estado',            count(*) FROM estado                     UNION ALL
-SELECT 'cidade',            count(*) FROM cidade                     UNION ALL
-SELECT 'endereco',          count(*) FROM endereco                   UNION ALL
-SELECT 'pessoa',            count(*) FROM pessoa                     UNION ALL
-SELECT 'telefone',          count(*) FROM telefone                   UNION ALL
-SELECT 'documento_pessoa',  count(*) FROM documento_pessoa           UNION ALL
-SELECT 'usuario',           count(*) FROM usuario                    UNION ALL
-SELECT 'campus',            count(*) FROM campus                     UNION ALL
-SELECT 'departamento',      count(*) FROM departamento               UNION ALL
-SELECT 'predio',            count(*) FROM predio                     UNION ALL
-SELECT 'sala',              count(*) FROM sala                       UNION ALL
-SELECT 'recurso',           count(*) FROM recurso                    UNION ALL
-SELECT 'sala_recurso',      count(*) FROM sala_recurso               UNION ALL
-SELECT 'professor',         count(*) FROM professor                  UNION ALL
-SELECT 'formacao_professor',count(*) FROM formacao_professor         UNION ALL
-SELECT 'curso',             count(*) FROM curso                      UNION ALL
-SELECT 'coordenacao_curso', count(*) FROM coordenacao_curso          UNION ALL
-SELECT 'curriculo',         count(*) FROM curriculo                  UNION ALL
-SELECT 'disciplina',        count(*) FROM disciplina                 UNION ALL
-SELECT 'curriculo_disciplina', count(*) FROM curriculo_disciplina    UNION ALL
-SELECT 'pre_requisito',     count(*) FROM pre_requisito              UNION ALL
-SELECT 'aluno',             count(*) FROM aluno                      UNION ALL
-SELECT 'aproveitamento_materia', count(*) FROM aproveitamento_materia UNION ALL
-SELECT 'periodo_letivo',    count(*) FROM periodo_letivo             UNION ALL
-SELECT 'periodo_matricula', count(*) FROM periodo_matricula          UNION ALL
-SELECT 'feriado',           count(*) FROM feriado                    UNION ALL
-SELECT 'turma',             count(*) FROM turma                      UNION ALL
-SELECT 'turma_professor',   count(*) FROM turma_professor            UNION ALL
-SELECT 'turma_horario',     count(*) FROM turma_horario              UNION ALL
-SELECT 'plano_ensino',      count(*) FROM plano_ensino               UNION ALL
-SELECT 'unidade_plano_ensino', count(*) FROM unidade_plano_ensino    UNION ALL
-SELECT 'bibliografia',      count(*) FROM bibliografia               UNION ALL
-SELECT 'plano_ensino_bibliografia', count(*) FROM plano_ensino_bibliografia UNION ALL
-SELECT 'matricula',         count(*) FROM matricula                  UNION ALL
-SELECT 'historico',         count(*) FROM historico                  UNION ALL
-SELECT 'log_matricula',     count(*) FROM log_matricula              UNION ALL
-SELECT 'aula',              count(*) FROM aula                       UNION ALL
-SELECT 'presenca',          count(*) FROM presenca                   UNION ALL
-SELECT 'avaliacao',         count(*) FROM avaliacao                  UNION ALL
-SELECT 'nota',              count(*) FROM nota
+SELECT 'tb_pais' AS tabela, count(*) FROM tb_pais                          UNION ALL
+SELECT 'tb_estado',            count(*) FROM tb_estado                     UNION ALL
+SELECT 'tb_cidade',            count(*) FROM tb_cidade                     UNION ALL
+SELECT 'tb_endereco',          count(*) FROM tb_endereco                   UNION ALL
+SELECT 'tb_pessoa',            count(*) FROM tb_pessoa                     UNION ALL
+SELECT 'tb_telefone',          count(*) FROM tb_telefone                   UNION ALL
+SELECT 'tb_documento_pessoa',  count(*) FROM tb_documento_pessoa           UNION ALL
+SELECT 'tb_usuario',           count(*) FROM tb_usuario                    UNION ALL
+SELECT 'tb_campus',            count(*) FROM tb_campus                     UNION ALL
+SELECT 'tb_departamento',      count(*) FROM tb_departamento               UNION ALL
+SELECT 'tb_predio',            count(*) FROM tb_predio                     UNION ALL
+SELECT 'tb_sala',              count(*) FROM tb_sala                       UNION ALL
+SELECT 'tb_recurso',           count(*) FROM tb_recurso                    UNION ALL
+SELECT 'tb_sala_recurso',      count(*) FROM tb_sala_recurso               UNION ALL
+SELECT 'tb_professor',         count(*) FROM tb_professor                  UNION ALL
+SELECT 'tb_formacao_professor',count(*) FROM tb_formacao_professor         UNION ALL
+SELECT 'tb_curso',             count(*) FROM tb_curso                      UNION ALL
+SELECT 'tb_coordenacao_curso', count(*) FROM tb_coordenacao_curso          UNION ALL
+SELECT 'tb_curriculo',         count(*) FROM tb_curriculo                  UNION ALL
+SELECT 'tb_disciplina',        count(*) FROM tb_disciplina                 UNION ALL
+SELECT 'tb_curriculo_disciplina', count(*) FROM tb_curriculo_disciplina    UNION ALL
+SELECT 'tb_pre_requisito',     count(*) FROM tb_pre_requisito              UNION ALL
+SELECT 'tb_aluno',             count(*) FROM tb_aluno                      UNION ALL
+SELECT 'tb_aproveitamento_materia', count(*) FROM tb_aproveitamento_materia UNION ALL
+SELECT 'tb_periodo_letivo',    count(*) FROM tb_periodo_letivo             UNION ALL
+SELECT 'tb_periodo_matricula', count(*) FROM tb_periodo_matricula          UNION ALL
+SELECT 'tb_feriado',           count(*) FROM tb_feriado                    UNION ALL
+SELECT 'tb_turma',             count(*) FROM tb_turma                      UNION ALL
+SELECT 'tb_turma_professor',   count(*) FROM tb_turma_professor            UNION ALL
+SELECT 'tb_turma_horario',     count(*) FROM tb_turma_horario              UNION ALL
+SELECT 'tb_plano_ensino',      count(*) FROM tb_plano_ensino               UNION ALL
+SELECT 'tb_unidade_plano_ensino', count(*) FROM tb_unidade_plano_ensino    UNION ALL
+SELECT 'tb_bibliografia',      count(*) FROM tb_bibliografia               UNION ALL
+SELECT 'tb_plano_ensino_bibliografia', count(*) FROM tb_plano_ensino_bibliografia UNION ALL
+SELECT 'tb_matricula',         count(*) FROM tb_matricula                  UNION ALL
+SELECT 'tb_historico',         count(*) FROM tb_historico                  UNION ALL
+SELECT 'log_matricula',     count(*) FROM tb_log_auditoria              UNION ALL
+SELECT 'tb_aula',              count(*) FROM tb_aula                       UNION ALL
+SELECT 'tb_presenca',          count(*) FROM tb_presenca                   UNION ALL
+SELECT 'tb_avaliacao',         count(*) FROM tb_avaliacao                  UNION ALL
+SELECT 'tb_nota',              count(*) FROM tb_nota
 ORDER BY tabela;
 
 -- ############################################################################
@@ -1827,7 +1924,7 @@ ORDER BY tabela;
 
 BEGIN;
 
-INSERT INTO estado (id_pais, nome_estado, uf_estado)
+INSERT INTO tb_estado (id_pais, nome_estado, uf_estado)
 SELECT p.id_pais, v.nome, v.uf
 FROM (VALUES
   ('Rondônia', 'RO'),
@@ -1858,10 +1955,10 @@ FROM (VALUES
   ('Goiás', 'GO'),
   ('Distrito Federal', 'DF')
 ) AS v(nome, uf)
-JOIN pais p ON p.sigla_pais = 'BR'
+JOIN tb_pais p ON p.sigla_pais = 'BR'
 ON CONFLICT (id_pais, uf_estado) DO NOTHING;
 
-INSERT INTO cidade (id_estado, nome_cidade, codigo_ibge_cidade)
+INSERT INTO tb_cidade (id_estado, nome_cidade, codigo_ibge_cidade)
 SELECT e.id_estado, v.nome, v.ibge
 FROM (VALUES
   ('RO', 'Alta Floresta D''oeste', '1100015'),
@@ -7435,7 +7532,7 @@ FROM (VALUES
   ('GO', 'Vila Propício', '5222302'),
   ('DF', 'Brasília', '5300108')
 ) AS v(uf, nome, ibge)
-JOIN estado e ON e.uf_estado = v.uf
+JOIN tb_estado e ON e.uf_estado = v.uf
 ON CONFLICT (codigo_ibge_cidade) DO NOTHING;
 
 COMMIT;
@@ -7443,8 +7540,8 @@ COMMIT;
 DO $$
 DECLARE n_est int; n_cid int;
 BEGIN
-  SELECT count(*) INTO n_est FROM estado;
-  SELECT count(*) INTO n_cid FROM cidade;
+  SELECT count(*) INTO n_est FROM tb_estado;
+  SELECT count(*) INTO n_cid FROM tb_cidade;
   IF n_est <> 27   THEN RAISE EXCEPTION 'Geografia: % estados (esperado 27)', n_est; END IF;
   IF n_cid <> 5570 THEN RAISE EXCEPTION 'Geografia: % cidades (esperado 5570)', n_cid; END IF;
   RAISE NOTICE 'Geografia IBGE OK: % estados, % municípios.', n_est, n_cid;
@@ -7469,14 +7566,14 @@ END $$;
 -- por subconsulta) e rodam na carga do 02_carga.sql.
 --
 -- O QUE A AMPLIAÇÃO MUDOU AQUI (modelo de 41 tabelas):
---   · o nome do aluno e do professor vêm de `pessoa` [E2] — toda consulta que
+--   · o nome do aluno e do professor vêm de `tb_pessoa` [E2] — toda consulta que
 --     exibe gente passa a ter mais uma junção, e isso é o preço explícito de
 --     não repetir nome/CPF em duas tabelas;
---   · o professor da turma vem de `turma_professor` filtrando o TITULAR [E11];
---   · a sala vem de `predio` [E5] e pode ser NULL (turma EAD) [E12] — por isso
+--   · o professor da turma vem de `tb_turma_professor` filtrando o TITULAR [E11];
+--   · a sala vem de `tb_predio` [E5] e pode ser NULL (turma EAD) [E12] — por isso
 --     LEFT JOIN, não INNER: com INNER a turma EAD sumiria do relatório;
 --   · média e frequência não existem mais como coluna: vêm de
---     `v_desempenho_matricula`, derivadas de nota/presenca [E14].
+--     `vw_desempenho_matricula`, derivadas de nota/presenca [E14].
 -- Execução:  docker exec -i bd2_aluno_postgres psql -U bd2 -d matricula < sql/03_consultas.sql
 -- ============================================================================
 \set ON_ERROR_STOP on
@@ -7495,15 +7592,15 @@ SET search_path TO academico, public;
 -- Leitura: distribuição de alunos ativos/inativos por curso.
 -- ============================================================================
 \echo '=== C1: alunos por curso e campus ==='
-SELECT cp.nome_campus                                   AS campus,
-       c.codigo_curso                                  AS curso,
+SELECT cp.nome_campus                                   AS tb_campus,
+       c.codigo_curso                                  AS tb_curso,
        c.nome_curso                                    AS nome_curso,
        count(a.id_aluno) FILTER (WHERE a.status_aluno = 'ativo')     AS ativos,
        count(a.id_aluno) FILTER (WHERE a.status_aluno <> 'ativo')    AS inativos,
        count(a.id_aluno)                               AS total
-FROM curso c
-JOIN campus cp     ON cp.id_campus = c.id_campus
-LEFT JOIN aluno a  ON a.id_curso = c.id_curso
+FROM tb_curso c
+JOIN tb_campus cp     ON cp.id_campus = c.id_campus
+LEFT JOIN tb_aluno a  ON a.id_curso = c.id_curso
 GROUP BY cp.nome_campus, c.id_curso
 ORDER BY cp.nome_campus, total DESC;
 
@@ -7516,40 +7613,40 @@ ORDER BY cp.nome_campus, total DESC;
 \echo '=== C2: grade horária do aluno mais matriculado de 2026/2 ==='
 WITH alvo AS (
   SELECT m.id_aluno
-  FROM matricula m
-  JOIN turma t           ON t.id_turma = m.id_turma
-  JOIN periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
+  FROM tb_matricula m
+  JOIN tb_turma t           ON t.id_turma = m.id_turma
+  JOIN tb_periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
   WHERE pl.ano_periodo_letivo = 2026 AND pl.semestre_periodo_letivo = 2 AND m.status_matricula = 'confirmada'
   GROUP BY m.id_aluno
   ORDER BY count(*) DESC, m.id_aluno
   LIMIT 1
 )
-SELECT pa.nome_pessoa                                                          AS aluno,
+SELECT pa.nome_pessoa                                                          AS tb_aluno,
        (ARRAY['seg','ter','qua','qui','sex','sab','dom'])[th.dia_semana_turma_horario] AS dia,
        left(lower(th.faixa_turma_horario)::text, 5) || '–' ||
        left(upper(th.faixa_turma_horario)::text, 5)                            AS horario,
-       d.codigo_disciplina                                                     AS disciplina,
-       t.codigo_turma                                                          AS turma,
-       coalesce(s.codigo_sala, '(EAD)')                                        AS sala,
-       coalesce(pr.nome_predio, '—')                                           AS predio,
-       coalesce(cp.nome_campus, t.modalidade_turma::text)                      AS campus,
-       pp.nome_pessoa                                                          AS professor
+       d.codigo_disciplina                                                     AS tb_disciplina,
+       t.codigo_turma                                                          AS tb_turma,
+       coalesce(s.codigo_sala, '(EAD)')                                        AS tb_sala,
+       coalesce(pr.nome_predio, '—')                                           AS tb_predio,
+       coalesce(cp.nome_campus, t.modalidade_turma::text)                      AS tb_campus,
+       pp.nome_pessoa                                                          AS tb_professor
 FROM alvo
-JOIN aluno a           ON a.id_aluno = alvo.id_aluno
-JOIN pessoa pa         ON pa.id_pessoa = a.id_pessoa                     -- [E2]
-JOIN matricula m       ON m.id_aluno = a.id_aluno AND m.status_matricula = 'confirmada'
-JOIN turma t           ON t.id_turma = m.id_turma
-JOIN periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
+JOIN tb_aluno a           ON a.id_aluno = alvo.id_aluno
+JOIN tb_pessoa pa         ON pa.id_pessoa = a.id_pessoa                     -- [E2]
+JOIN tb_matricula m       ON m.id_aluno = a.id_aluno AND m.status_matricula = 'confirmada'
+JOIN tb_turma t           ON t.id_turma = m.id_turma
+JOIN tb_periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
                       AND pl.ano_periodo_letivo = 2026 AND pl.semestre_periodo_letivo = 2
-JOIN disciplina d      ON d.id_disciplina = t.id_disciplina
-JOIN turma_professor tp ON tp.id_turma = t.id_turma
+JOIN tb_disciplina d      ON d.id_disciplina = t.id_disciplina
+JOIN tb_turma_professor tp ON tp.id_turma = t.id_turma
                       AND tp.papel_turma_professor = 'titular'           -- [E11]
-JOIN professor p       ON p.id_professor = tp.id_professor
-JOIN pessoa pp         ON pp.id_pessoa = p.id_pessoa                     -- [E2]
-JOIN turma_horario th  ON th.id_turma = t.id_turma
-LEFT JOIN sala s       ON s.id_sala = th.id_sala                         -- NULL = EAD [E12]
-LEFT JOIN predio pr    ON pr.id_predio = s.id_predio                     -- [E5]
-LEFT JOIN campus cp    ON cp.id_campus = pr.id_campus
+JOIN tb_professor p       ON p.id_professor = tp.id_professor
+JOIN tb_pessoa pp         ON pp.id_pessoa = p.id_pessoa                     -- [E2]
+JOIN tb_turma_horario th  ON th.id_turma = t.id_turma
+LEFT JOIN tb_sala s       ON s.id_sala = th.id_sala                         -- NULL = EAD [E12]
+LEFT JOIN tb_predio pr    ON pr.id_predio = s.id_predio                     -- [E5]
+LEFT JOIN tb_campus cp    ON cp.id_campus = pr.id_campus
 ORDER BY th.dia_semana_turma_horario, lower(th.faixa_turma_horario);
 
 -- ============================================================================
@@ -7561,8 +7658,8 @@ ORDER BY th.dia_semana_turma_horario, lower(th.faixa_turma_horario);
 -- Leitura: painel de vagas_turma para a secretaria; base da view de oferta (Marco 2).
 -- ============================================================================
 \echo '=== C3: ocupação das turmas 2026/2 (junção externa + agregação) ==='
-SELECT t.codigo_turma                                                   AS turma,
-       d.nome_disciplina                                                     AS disciplina,
+SELECT t.codigo_turma                                                   AS tb_turma,
+       d.nome_disciplina                                                     AS tb_disciplina,
        t.turno_turma,
        t.vagas_turma,
        count(m.id_matricula) FILTER (WHERE m.status_matricula = 'confirmada')         AS confirmadas,
@@ -7570,11 +7667,11 @@ SELECT t.codigo_turma                                                   AS turma
        t.vagas_turma - count(m.id_matricula) FILTER (WHERE m.status_matricula = 'confirmada') AS vagas_livres,
        round(100.0 * count(m.id_matricula) FILTER (WHERE m.status_matricula = 'confirmada')
              / NULLIF(t.vagas_turma, 0), 1)                             AS ocupacao_pct
-FROM turma t
-JOIN periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
+FROM tb_turma t
+JOIN tb_periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
                       AND pl.ano_periodo_letivo = 2026 AND pl.semestre_periodo_letivo = 2
-JOIN disciplina d      ON d.id_disciplina = t.id_disciplina
-LEFT JOIN matricula m  ON m.id_turma = t.id_turma
+JOIN tb_disciplina d      ON d.id_disciplina = t.id_disciplina
+LEFT JOIN tb_matricula m  ON m.id_turma = t.id_turma
 GROUP BY t.id_turma, d.nome_disciplina
 ORDER BY ocupacao_pct DESC NULLS LAST, t.codigo_turma;
 
@@ -7594,14 +7691,14 @@ SELECT d.codigo_disciplina,
        count(*) FILTER (WHERE h.situacao_historico = 'reprovado_frequencia') AS rep_freq,
        round(100.0 * count(*) FILTER (WHERE h.situacao_historico = 'aprovado')
              / count(*), 1)                                      AS aprovacao_pct
-FROM disciplina d
-JOIN turma t           ON t.id_disciplina = d.id_disciplina
-JOIN periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
+FROM tb_disciplina d
+JOIN tb_turma t           ON t.id_disciplina = d.id_disciplina
+JOIN tb_periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
                       AND (pl.ano_periodo_letivo, pl.semestre_periodo_letivo) < (2026, 2)
-JOIN matricula m       ON m.id_turma = t.id_turma
-JOIN historico h       ON h.id_matricula = m.id_matricula
+JOIN tb_matricula m       ON m.id_turma = t.id_turma
+JOIN tb_historico h       ON h.id_matricula = m.id_matricula
                       AND h.situacao_historico IN ('aprovado', 'reprovado_nota', 'reprovado_frequencia')
-LEFT JOIN v_desempenho_matricula dm ON dm.id_matricula = m.id_matricula     -- [E14]
+LEFT JOIN vw_desempenho_matricula dm ON dm.id_matricula = m.id_matricula     -- [E14]
 GROUP BY d.id_disciplina
 HAVING count(h.id_historico) >= 10
 ORDER BY aprovacao_pct, d.codigo_disciplina;
@@ -7618,24 +7715,36 @@ ORDER BY aprovacao_pct, d.codigo_disciplina;
 -- Leitura: tudo que é preciso cursar (transitivamente) antes de TABD.
 -- ============================================================================
 \echo '=== C5: árvore de pré-requisitos de TABD (recursiva) ==='
-WITH RECURSIVE arvore (node_id, nivel, caminho, vinculo) AS (
+-- [E17] a árvore agora é de UMA MATRIZ: a cadeia é decisão do currículo, e
+-- currículos diferentes encadeiam diferente. O alvo é a matriz vigente de CC.
+WITH RECURSIVE
+matriz AS (
+  SELECT cu.id_curriculo
+  FROM tb_curriculo cu
+  JOIN tb_curso c ON c.id_curso = cu.id_curso
+  WHERE c.codigo_curso = 'CC' AND cu.ativo_curriculo
+  ORDER BY cu.ano_vigencia_curriculo DESC
+  LIMIT 1
+),
+arvore (node_id, nivel, caminho) AS (
   -- âncora: a própria disciplina-alvo
-  SELECT d.id_disciplina, 0, ARRAY[d.id_disciplina], NULL::vinculo_t
-  FROM disciplina d
+  SELECT d.id_disciplina, 0, ARRAY[d.id_disciplina]
+  FROM tb_disciplina d
   WHERE d.codigo_disciplina = 'TABD'
   UNION ALL
-  -- passo: para cada nó, busca seus requisitos diretos
-  SELECT p.id_requisito, a.nivel + 1, a.caminho || p.id_requisito, p.vinculo_pre_requisito
+  -- passo: os requisitos diretos DAQUELA matriz
+  SELECT p.id_requisito, a.nivel + 1, a.caminho || p.id_requisito
   FROM arvore a
-  JOIN pre_requisito p ON p.id_disciplina = a.node_id
+  JOIN tb_pre_requisito p ON p.id_disciplina = a.node_id
+                         AND p.id_curriculo = (SELECT id_curriculo FROM matriz)
   WHERE NOT p.id_requisito = ANY (a.caminho)      -- proteção contra ciclos
 )
 SELECT repeat('    ', a.nivel) || d.codigo_disciplina AS arvore,
        d.nome_disciplina,
        a.nivel,
-       coalesce(a.vinculo::text, '(alvo)') AS vinculo
+       CASE WHEN a.nivel = 0 THEN '(alvo)' ELSE 'pré-requisito' END AS vinculo
 FROM arvore a
-JOIN disciplina d ON d.id_disciplina = a.node_id
+JOIN tb_disciplina d ON d.id_disciplina = a.node_id
 ORDER BY a.caminho;
 
 -- ============================================================================
@@ -7648,26 +7757,26 @@ ORDER BY a.caminho;
 --   Por que o array? O PostgreSQL proíbe referenciar o CTE recursivo em
 --   subconsulta/agregação dentro do passo recursivo; carregar o conjunto
 --   acumulado como array na própria linha contorna isso de forma elegante.
---   Co-requisitos (vinculo <> 'pre_requisito') não bloqueiam a liberação.
+--   [E17] os pré-requisitos consultados são os DA MATRIZ do aluno.
 -- Leitura: o "plano de matrícula" possível do aluno, semestre a semestre.
 -- ============================================================================
 \echo '=== C6: disciplinas liberadas para o aluno com mais aprovações (recursiva) ==='
 WITH RECURSIVE
 alvo AS (                               -- aluno com mais disciplinas aprovadas
   SELECT m.id_aluno AS id_aluno, a.id_curriculo, p.nome_pessoa AS nome_aluno
-  FROM matricula m
-  JOIN historico h ON h.id_matricula = m.id_matricula AND h.situacao_historico = 'aprovado'
-  JOIN aluno a     ON a.id_aluno = m.id_aluno
-  JOIN pessoa p    ON p.id_pessoa = a.id_pessoa                            -- [E2]
+  FROM tb_matricula m
+  JOIN tb_historico h ON h.id_matricula = m.id_matricula AND h.situacao_historico = 'aprovado'
+  JOIN tb_aluno a     ON a.id_aluno = m.id_aluno
+  JOIN tb_pessoa p    ON p.id_pessoa = a.id_pessoa                            -- [E2]
   GROUP BY m.id_aluno, a.id_curriculo, p.nome_pessoa
   ORDER BY count(*) DESC, m.id_aluno
   LIMIT 1
 ),
 aprovadas AS (                          -- conjunto-base: o que ele já aprovou
   SELECT DISTINCT t.id_disciplina
-  FROM matricula m
-  JOIN turma t     ON t.id_turma = m.id_turma
-  JOIN historico h ON h.id_matricula = m.id_matricula
+  FROM tb_matricula m
+  JOIN tb_turma t     ON t.id_turma = m.id_turma
+  JOIN tb_historico h ON h.id_matricula = m.id_matricula
   WHERE m.id_aluno = (SELECT id_aluno FROM alvo) AND h.situacao_historico = 'aprovado'
 ),
 expansao (nivel, feitas, novas) AS (
@@ -7680,21 +7789,21 @@ expansao (nivel, feitas, novas) AS (
   CROSS JOIN LATERAL (
     SELECT ARRAY(
       SELECT cd.id_disciplina
-      FROM curriculo_disciplina cd
+      FROM tb_curriculo_disciplina cd
       WHERE cd.id_curriculo = (SELECT id_curriculo FROM alvo)
         AND cd.id_disciplina <> ALL (e.feitas)          -- ainda não feita
         AND NOT EXISTS (                                -- nenhum pré-req pendente
               SELECT 1
-              FROM pre_requisito p
+              FROM tb_pre_requisito p
               WHERE p.id_disciplina = cd.id_disciplina
-                AND p.vinculo_pre_requisito = 'pre_requisito'
+                AND p.id_curriculo   = cd.id_curriculo      -- [E17]
                 AND NOT (p.id_requisito = ANY (e.feitas)))
       ORDER BY cd.id_disciplina
     ) AS novas
   ) x
   WHERE cardinality(x.novas) > 0 AND e.nivel < 12       -- término garantido
 )
-SELECT (SELECT nome_aluno FROM alvo)               AS aluno,
+SELECT (SELECT nome_aluno FROM alvo)               AS tb_aluno,
        e.nivel                               AS onda,
        CASE e.nivel WHEN 1 THEN 'PODE CURSAR JÁ'
                     ELSE 'destrava na onda ' || e.nivel END AS quando,
@@ -7704,8 +7813,8 @@ SELECT (SELECT nome_aluno FROM alvo)               AS aluno,
        cd.tipo_curriculo_disciplina
 FROM expansao e
 CROSS JOIN LATERAL unnest(e.novas) AS n(id_disciplina)
-JOIN disciplina d            ON d.id_disciplina = n.id_disciplina
-JOIN curriculo_disciplina cd ON cd.id_disciplina = d.id_disciplina
+JOIN tb_disciplina d            ON d.id_disciplina = n.id_disciplina
+JOIN tb_curriculo_disciplina cd ON cd.id_disciplina = d.id_disciplina
                             AND cd.id_curriculo = (SELECT id_curriculo FROM alvo)
 WHERE e.nivel >= 1
 ORDER BY e.nivel, d.codigo_disciplina;
@@ -7721,27 +7830,27 @@ ORDER BY e.nivel, d.codigo_disciplina;
 -- ============================================================================
 \echo '=== C7: ranking + percentil de rendimento por curso (janela) ==='
 WITH rendimento AS (
-  SELECT a.id_aluno, a.matricula_aluno, p.nome_pessoa AS nome_aluno, c.codigo_curso AS curso,
+  SELECT a.id_aluno, a.matricula_aluno, p.nome_pessoa AS nome_aluno, c.codigo_curso AS tb_curso,
          round(sum(dm.media_final * d.ch_total_disciplina) / sum(d.ch_total_disciplina), 2) AS cr,
          count(*) AS disciplinas_avaliadas
-  FROM aluno a
-  JOIN pessoa p    ON p.id_pessoa = a.id_pessoa                            -- [E2]
-  JOIN curso c     ON c.id_curso = a.id_curso
-  JOIN matricula m ON m.id_aluno = a.id_aluno
-  JOIN turma t     ON t.id_turma = m.id_turma
-  JOIN disciplina d ON d.id_disciplina = t.id_disciplina
-  JOIN v_desempenho_matricula dm ON dm.id_matricula = m.id_matricula        -- [E14]
+  FROM tb_aluno a
+  JOIN tb_pessoa p    ON p.id_pessoa = a.id_pessoa                            -- [E2]
+  JOIN tb_curso c     ON c.id_curso = a.id_curso
+  JOIN tb_matricula m ON m.id_aluno = a.id_aluno
+  JOIN tb_turma t     ON t.id_turma = m.id_turma
+  JOIN tb_disciplina d ON d.id_disciplina = t.id_disciplina
+  JOIN vw_desempenho_matricula dm ON dm.id_matricula = m.id_matricula        -- [E14]
                                 AND dm.media_final IS NOT NULL
   GROUP BY a.id_aluno, p.nome_pessoa, c.codigo_curso
   HAVING count(*) >= 3
 )
-SELECT curso, matricula_aluno, nome_aluno, cr, disciplinas_avaliadas,   -- matrícula desambigua homônimos
-       rank()         OVER (PARTITION BY curso ORDER BY cr DESC)      AS posicao,
-       round((percent_rank() OVER (PARTITION BY curso ORDER BY cr))::numeric
+SELECT tb_curso, matricula_aluno, nome_aluno, cr, disciplinas_avaliadas,   -- matrícula desambigua homônimos
+       rank()         OVER (PARTITION BY tb_curso ORDER BY cr DESC)      AS posicao,
+       round((percent_rank() OVER (PARTITION BY tb_curso ORDER BY cr))::numeric
              * 100, 1)                                                AS percentil,
-       ntile(4)       OVER (PARTITION BY curso ORDER BY cr DESC)      AS quartil
+       ntile(4)       OVER (PARTITION BY tb_curso ORDER BY cr DESC)      AS quartil
 FROM rendimento
-ORDER BY curso, posicao
+ORDER BY tb_curso, posicao
 LIMIT 30;
 
 -- ============================================================================
@@ -7758,10 +7867,10 @@ WITH medias AS (
          pl.ano_periodo_letivo, pl.semestre_periodo_letivo,
          pl.ano_periodo_letivo || '/' || pl.semestre_periodo_letivo       AS periodo,
          round(avg(dm.media_final), 2)       AS media_periodo
-  FROM matricula m
-  JOIN turma t           ON t.id_turma = m.id_turma
-  JOIN periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
-  JOIN v_desempenho_matricula dm ON dm.id_matricula = m.id_matricula        -- [E14]
+  FROM tb_matricula m
+  JOIN tb_turma t           ON t.id_turma = m.id_turma
+  JOIN tb_periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
+  JOIN vw_desempenho_matricula dm ON dm.id_matricula = m.id_matricula        -- [E14]
                                 AND dm.media_final IS NOT NULL
   GROUP BY m.id_aluno, pl.ano_periodo_letivo, pl.semestre_periodo_letivo
 )
@@ -7778,8 +7887,8 @@ SELECT a.matricula_aluno,                    -- desambigua homônimos (nomes se 
          ELSE '≈ estável'
        END AS tendencia
 FROM medias md
-JOIN aluno a  ON a.id_aluno = md.id_aluno
-JOIN pessoa pe ON pe.id_pessoa = a.id_pessoa                                -- [E2]
+JOIN tb_aluno a  ON a.id_aluno = md.id_aluno
+JOIN tb_pessoa pe ON pe.id_pessoa = a.id_pessoa                                -- [E2]
 WHERE md.id_aluno IN (SELECT id_aluno FROM medias GROUP BY id_aluno HAVING count(*) >= 3)
 WINDOW w AS (PARTITION BY md.id_aluno ORDER BY md.ano_periodo_letivo, md.semestre_periodo_letivo)
 ORDER BY pe.nome_pessoa, a.matricula_aluno, md.ano_periodo_letivo, md.semestre_periodo_letivo
@@ -7804,17 +7913,17 @@ SELECT (ARRAY['seg','ter','qua','qui','sex','sab','dom'])[h1.dia_semana_turma_ho
        t2.codigo_turma || ' (' || left(lower(h2.faixa_turma_horario)::text, 5) || '–'
                  || left(upper(h2.faixa_turma_horario)::text, 5) || ')' AS turma_b,
        count(DISTINCT m1.id_aluno)                        AS alunos_afetados
-FROM matricula m1
-JOIN matricula m2      ON m2.id_aluno = m1.id_aluno
+FROM tb_matricula m1
+JOIN tb_matricula m2      ON m2.id_aluno = m1.id_aluno
                       AND m2.id_turma > m1.id_turma
                       AND m1.status_matricula = 'confirmada' AND m2.status_matricula = 'confirmada'
-JOIN turma t1          ON t1.id_turma = m1.id_turma
-JOIN turma t2          ON t2.id_turma = m2.id_turma
+JOIN tb_turma t1          ON t1.id_turma = m1.id_turma
+JOIN tb_turma t2          ON t2.id_turma = m2.id_turma
                       AND t2.id_periodo_letivo = t1.id_periodo_letivo
-JOIN periodo_letivo pl ON pl.id_periodo_letivo = t1.id_periodo_letivo
+JOIN tb_periodo_letivo pl ON pl.id_periodo_letivo = t1.id_periodo_letivo
                       AND pl.ano_periodo_letivo = 2026 AND pl.semestre_periodo_letivo = 2
-JOIN turma_horario h1  ON h1.id_turma = t1.id_turma
-JOIN turma_horario h2  ON h2.id_turma = t2.id_turma
+JOIN tb_turma_horario h1  ON h1.id_turma = t1.id_turma
+JOIN tb_turma_horario h2  ON h2.id_turma = t2.id_turma
                       AND h2.dia_semana_turma_horario = h1.dia_semana_turma_horario
                       AND h1.faixa_turma_horario && h2.faixa_turma_horario          -- sobreposição de ranges
 GROUP BY h1.dia_semana_turma_horario, t1.codigo_turma, h1.faixa_turma_horario, t2.codigo_turma, h2.faixa_turma_horario
@@ -7832,13 +7941,11 @@ ORDER BY alunos_afetados DESC, dia, turma_a;
 \echo '=== C10: disciplinas-gargalo (recursiva + agregação + janela) ==='
 WITH RECURSIVE dependentes AS (
   SELECT p.id_requisito AS base_id, p.id_disciplina AS dependente_id
-  FROM pre_requisito p
-  WHERE p.vinculo_pre_requisito = 'pre_requisito'
+  FROM tb_pre_requisito p
   UNION                                       -- sem ALL: deduplica diamantes
   SELECT dep.base_id, p.id_disciplina
   FROM dependentes dep
-  JOIN pre_requisito p ON p.id_requisito = dep.dependente_id
-                      AND p.vinculo_pre_requisito = 'pre_requisito'
+  JOIN tb_pre_requisito p ON p.id_requisito = dep.dependente_id
 ),
 destravas AS (
   SELECT base_id, count(DISTINCT dependente_id) AS destrava
@@ -7850,11 +7957,11 @@ reprovacao AS (
          count(*)                                                    AS avaliacoes,
          round(100.0 * count(*) FILTER (WHERE h.situacao_historico IN
                ('reprovado_nota', 'reprovado_frequencia')) / count(*), 1) AS reprovacao_pct
-  FROM turma t
-  JOIN periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
+  FROM tb_turma t
+  JOIN tb_periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
                         AND (pl.ano_periodo_letivo, pl.semestre_periodo_letivo) < (2026, 2)
-  JOIN matricula m       ON m.id_turma = t.id_turma
-  JOIN historico h       ON h.id_matricula = m.id_matricula
+  JOIN tb_matricula m       ON m.id_turma = t.id_turma
+  JOIN tb_historico h       ON h.id_matricula = m.id_matricula
                         AND h.situacao_historico IN ('aprovado', 'reprovado_nota', 'reprovado_frequencia')
   GROUP BY t.id_disciplina
 )
@@ -7866,7 +7973,7 @@ SELECT d.codigo_disciplina,
        round(coalesce(ds.destrava, 0) * r.reprovacao_pct / 100.0, 2) AS indice_criticidade,
        dense_rank() OVER (ORDER BY coalesce(ds.destrava, 0) * r.reprovacao_pct DESC) AS prioridade
 FROM reprovacao r
-JOIN disciplina d    ON d.id_disciplina = r.id_disciplina
+JOIN tb_disciplina d    ON d.id_disciplina = r.id_disciplina
 LEFT JOIN destravas ds ON ds.base_id = d.id_disciplina
 ORDER BY prioridade, d.codigo_disciplina
 LIMIT 15;

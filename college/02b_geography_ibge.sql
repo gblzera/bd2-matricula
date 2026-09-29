@@ -1,5 +1,30 @@
+-- ============================================================================
+-- 02b_geography_ibge.sql — IBGE geography: 27 states, 5,570 municipalities
+-- College · English mirror of the Brazilian academic model
+--
+-- GENERATED FILE — do not edit by hand.
+--   source: sql/02b_geografia_ibge.sql   (Portuguese, the single source of truth)
+--   run:    python3 scripts/gerar_college.py
+--
+-- SCOPE: schema + data only. Queries, views, indexes, transactions and the
+-- security layer stay in the Portuguese repository — the security script
+-- creates ROLES, which are CLUSTER-wide objects and would collide with the
+-- ones already owned by the `matricula` database.
+--
+-- The structure is IDENTICAL to the Portuguese model: same 41 tables, same
+-- columns, same constraints. Only the identifiers changed. Explanatory
+-- comments were left in Portuguese on purpose — they carry the reasoning
+-- behind each decision, and machine-translating that prose would degrade it.
+--
+-- VOCABULARY NOTE, because a literal translation would mislead an English
+-- reader: in the Brazilian system `curso` is the degree a student graduates
+-- with and `disciplina` is the subject taught in a term. The English academic
+-- vocabulary maps these to PROGRAM and COURSE respectively — so
+-- `curso -> program` and `disciplina -> course`. Translating `curso` as
+-- "course" would collide with the other concept in every query.
+-- ============================================================================
 -- =========================================================================
--- 02b_geography_ibge.sql — GERADO por scripts/gerar_geography_ibge.py. NÃO EDITAR À MÃO.
+-- 02b_geografia_ibge.sql — GERADO por scripts/gerar_geografia_ibge.py. NÃO EDITAR À MÃO.
 -- Geografia completa do Brasil: 27 estados + 5.570 municípios com código
 -- IBGE (fonte: github.com/leogermani/estados-e-municipios-ibge).
 -- Roda DEPOIS da carga base e é idempotente: ON CONFLICT DO NOTHING sobre
@@ -9,8 +34,8 @@
 
 BEGIN;
 
-INSERT INTO state (country_id, name, abbreviation)
-SELECT c.country_id, v.name, v.uf
+INSERT INTO tb_state (country_id, name, abbreviation)
+SELECT p.country_id, v.name, v.abbrev
 FROM (VALUES
   ('Rondônia', 'RO'),
   ('Acre', 'AC'),
@@ -39,12 +64,12 @@ FROM (VALUES
   ('Mato Grosso', 'MT'),
   ('Goiás', 'GO'),
   ('Distrito Federal', 'DF')
-) AS v(name, uf)
-JOIN country c ON c.iso_code = 'BR'
+) AS v(name, abbrev)
+JOIN tb_country p ON p.iso_code = 'BR'
 ON CONFLICT (country_id, abbreviation) DO NOTHING;
 
-INSERT INTO city (state_id, name, ibge_code)
-SELECT s.state_id, v.name, v.ibge
+INSERT INTO tb_city (state_id, name, ibge_code)
+SELECT e.state_id, v.name, v.ibge
 FROM (VALUES
   ('RO', 'Alta Floresta D''oeste', '1100015'),
   ('RO', 'Ariquemes', '1100023'),
@@ -5616,18 +5641,18 @@ FROM (VALUES
   ('GO', 'Vila Boa', '5222203'),
   ('GO', 'Vila Propício', '5222302'),
   ('DF', 'Brasília', '5300108')
-) AS v(uf, name, ibge)
-JOIN state s ON s.abbreviation = v.uf
+) AS v(abbrev, name, ibge)
+JOIN tb_state e ON e.abbreviation = v.abbrev
 ON CONFLICT (ibge_code) DO NOTHING;
 
 COMMIT;
 
 DO $$
-DECLARE n_st int; n_ct int;
+DECLARE n_est int; n_cid int;
 BEGIN
-  SELECT count(*) INTO n_st FROM state;
-  SELECT count(*) INTO n_ct FROM city;
-  IF n_st <> 27   THEN RAISE EXCEPTION 'Geography: % states (expected 27)', n_st; END IF;
-  IF n_ct <> 5570 THEN RAISE EXCEPTION 'Geography: % cities (expected 5570)', n_ct; END IF;
-  RAISE NOTICE 'IBGE geography OK: % states, % cities.', n_st, n_ct;
+  SELECT count(*) INTO n_est FROM tb_state;
+  SELECT count(*) INTO n_cid FROM tb_city;
+  IF n_est <> 27   THEN RAISE EXCEPTION 'Geografia: % estados (esperado 27)', n_est; END IF;
+  IF n_cid <> 5570 THEN RAISE EXCEPTION 'Geografia: % cidades (esperado 5570)', n_cid; END IF;
+  RAISE NOTICE 'Geografia IBGE OK: % estados, % municípios.', n_est, n_cid;
 END $$;

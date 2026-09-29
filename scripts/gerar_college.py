@@ -19,25 +19,25 @@ import io, re, sys, os
 
 # ============================================================ TABELAS (41)
 TABELA = {
- 'pais':'country', 'estado':'state', 'cidade':'city', 'endereco':'address',
- 'pessoa':'person', 'telefone':'phone', 'documento_pessoa':'person_document',
- 'usuario':'app_user',            # `user` é palavra reservada no SQL padrão
- 'campus':'campus', 'departamento':'department', 'predio':'building',
- 'sala':'room', 'recurso':'resource', 'sala_recurso':'room_resource',
- 'professor':'professor', 'formacao_professor':'professor_degree',
- 'curso':'program',               # curso = o diploma; ver nota de vocabulário
- 'coordenacao_curso':'program_coordination', 'curriculo':'curriculum',
- 'disciplina':'course',           # disciplina = a matéria cursada
- 'curriculo_disciplina':'curriculum_course', 'pre_requisito':'prerequisite',
- 'aluno':'student', 'aproveitamento_materia':'credit_transfer',
- 'periodo_letivo':'academic_term', 'periodo_matricula':'enrollment_window',
- 'feriado':'holiday', 'turma':'section', 'turma_professor':'section_professor',
- 'turma_horario':'section_schedule', 'plano_ensino':'syllabus',
- 'unidade_plano_ensino':'syllabus_unit', 'bibliografia':'bibliography',
- 'plano_ensino_bibliografia':'syllabus_bibliography',
- 'matricula':'enrollment', 'historico':'academic_record',
- 'log_matricula':'enrollment_log', 'aula':'class_meeting',
- 'presenca':'attendance', 'avaliacao':'assessment', 'nota':'grade',
+ 'tb_pais':'tb_country', 'tb_estado':'tb_state', 'tb_cidade':'tb_city', 'tb_endereco':'tb_address',
+ 'tb_pessoa':'tb_person', 'tb_telefone':'tb_phone', 'tb_documento_pessoa':'tb_person_document',
+ 'tb_usuario':'tb_app_user',            # `user` é palavra reservada no SQL padrão
+ 'tb_campus':'tb_campus', 'tb_departamento':'tb_department', 'tb_predio':'tb_building',
+ 'tb_sala':'tb_room', 'tb_recurso':'tb_resource', 'tb_sala_recurso':'tb_room_resource',
+ 'tb_professor':'tb_professor', 'tb_formacao_professor':'tb_professor_degree',
+ 'tb_curso':'tb_program',               # curso = o diploma; ver nota de vocabulário
+ 'tb_coordenacao_curso':'tb_program_coordination', 'tb_curriculo':'tb_curriculum',
+ 'tb_disciplina':'tb_course',           # disciplina = a matéria cursada
+ 'tb_curriculo_disciplina':'tb_curriculum_course', 'tb_pre_requisito':'tb_prerequisite',
+ 'tb_aluno':'tb_student', 'tb_aproveitamento_materia':'tb_credit_transfer',
+ 'tb_periodo_letivo':'tb_academic_term', 'tb_periodo_matricula':'tb_enrollment_window',
+ 'tb_feriado':'tb_holiday', 'tb_turma':'tb_section', 'tb_turma_professor':'tb_section_professor',
+ 'tb_turma_horario':'tb_section_schedule', 'tb_plano_ensino':'tb_syllabus',
+ 'tb_unidade_plano_ensino':'tb_syllabus_unit', 'tb_bibliografia':'tb_bibliography',
+ 'tb_plano_ensino_bibliografia':'tb_syllabus_bibliography',
+ 'tb_matricula':'tb_enrollment', 'tb_historico':'tb_academic_record',
+ 'tb_log_auditoria':'tb_audit_log', 'tb_aula':'tb_class_meeting',
+ 'tb_presenca':'tb_attendance', 'tb_avaliacao':'tb_assessment', 'tb_nota':'tb_grade',
 }
 
 # ============================================================ COLUNAS
@@ -79,10 +79,10 @@ COLUNA = {
  'ementa_disciplina':'description','ch_teorica_disciplina':'theory_hours',
  'ch_pratica_disciplina':'lab_hours','ch_total_disciplina':'total_hours',
  'periodo_curriculo_disciplina':'term_number','tipo_curriculo_disciplina':'requirement_type',
- 'id_requisito':'required_course_id','ch_minima_pre_requisito':'min_hours',
- 'media_minima_pre_requisito':'min_grade','vinculo_pre_requisito':'link_type',
+ 'id_requisito':'required_course_id',
+ 'media_minima_pre_requisito':'min_grade',
  'id_aluno':'student_id','matricula_aluno':'enrollment_number',
- 'ingresso_aluno':'admission_date','forma_ingresso_aluno':'admission_type',
+ 'forma_ingresso_aluno':'admission_type',
  'status_aluno':'status',
  'id_aproveitamento_materia':'credit_transfer_id',
  'disciplina_origem_aproveitamento_materia':'source_course',
@@ -119,8 +119,8 @@ COLUNA = {
  'id_matricula':'enrollment_id','data_matricula':'enrolled_at','status_matricula':'status',
  'id_historico':'academic_record_id','data_fechamento_historico':'closed_on',
  'situacao_historico':'outcome',
- 'id_log_matricula':'enrollment_log_id','ocorrido_em_log_matricula':'occurred_at',
- 'acao_log_matricula':'action','detalhe_log_matricula':'detail',
+ 'id_log_auditoria':'audit_log_id','ocorrido_em':'occurred_at','acao_log':'action',
+ 'nome_tabela':'table_name','dados_antes':'data_before','dados_depois':'data_after',
  'id_aula':'class_meeting_id','conteudo_aula':'topic','data_aula':'meeting_date',
  'realizada_aula':'was_held',
  'presente_presenca':'was_present','justificada_presenca':'is_excused',
@@ -128,6 +128,7 @@ COLUNA = {
  'data_avaliacao':'assessment_date','substitutiva_avaliacao':'is_makeup',
  'valor_nota':'value',
  # colunas de saída da view de derivação
+ 'criado_em':'created_at','atualizado_em':'updated_at','excluido_em':'deleted_at',
  'media_final':'final_grade','frequencia':'attendance_rate',
  'aulas_previstas':'meetings_expected','presencas':'meetings_attended',
  'avaliacoes_lancadas':'assessments_recorded','usou_substitutiva':'used_makeup',
@@ -199,11 +200,12 @@ APELIDO = {
 # ============================================================ OUTROS OBJETOS
 OUTRO = {
  'academico':'academic',
- 'f_usuario_sessao':'f_session_user','aluno_id_de':'student_id_of',
- 'pessoa_id_de':'person_id_of','v_desempenho_matricula':'v_enrollment_performance',
- 'mv_indicadores':'mv_course_indicators','mv_historico_consolidado':'mv_academic_record',
- 'ux_mv_indicadores':'ux_mv_course_indicators','ux_mv_historico_consolidado':'ux_mv_academic_record',
- 'v_oferta_periodo':'v_term_offering','v_vagas_disponiveis':'v_available_seats','v_historico_aluno':'v_student_record',
+ 'f_usuario_sessao':'f_session_user','f_auditoria':'f_audit',
+ 'f_marca_atualizacao':'f_touch_updated_at','aluno_id_de':'student_id_of',
+ 'pessoa_id_de':'person_id_of','vw_desempenho_matricula':'vw_enrollment_performance',
+ 'vwm_indicadores':'vwm_course_indicators','vwm_historico_consolidado':'vwm_academic_record',
+ 'ux_vwm_indicadores':'ux_vwm_course_indicators','ux_vwm_historico_consolidado':'ux_vwm_academic_record',
+ 'vw_oferta_periodo':'vw_term_offering','vw_vagas_disponiveis':'vw_available_seats','vw_historico_aluno':'vw_student_record',
 }
 
 # tokens usados dentro de nomes de restrição/índice (uq_, fk_, ck_, ex_, idx_, ux_)
@@ -262,13 +264,20 @@ def aplicar(texto):
             for d in (ROTULO, OUTRO, TABELA, TIPO, COLUNA):
                 if interno in d:
                     partes[i] = "'%s'" % d[interno]; achou = True; break
-            if not achou and 'search_path' in interno:
+            # literal que é COMANDO SQL, não prosa: o DDL monta ALTER TABLE e
+            # CREATE TRIGGER dentro de strings (format/EXECUTE), e o [C15] monta
+            # um ALTER DATABASE. Os identificadores ali dentro precisam ser
+            # traduzidos, ou o banco inglês nasce com nome português por dentro.
+            eh_sql = any(k in interno for k in
+                         ('search_path', 'ALTER TABLE', 'CREATE TRIGGER', 'ADD COLUMN'))
+            if not achou and eh_sql:
                 # literal que é COMANDO SQL, não prosa: o `\gexec` do [C15] monta
                 # um ALTER DATABASE dentro de uma string. O nome do schema aí
                 # dentro precisa ser traduzido, ou o banco inglês nasce com o
                 # search_path apontando para um schema que não existe.
-                for pt_, en_ in OUTRO.items():
-                    interno = re.sub(r'\b%s\b' % re.escape(pt_), en_, interno)
+                _m = {}; _m.update(COLUNA); _m.update(TABELA); _m.update(TIPO); _m.update(OUTRO)
+                for pt_ in sorted(_m, key=len, reverse=True):
+                    interno = re.sub(r'\b%s\b' % re.escape(pt_), _m[pt_], interno)
                 partes[i] = "'%s'" % interno
             continue
         # nomes de restrição e índice, token a token
@@ -349,11 +358,14 @@ if __name__ == '__main__':
     conferir_reservadas()
     n1 = gerar('sql/01_ddl.sql', 'college/01_schema.sql', 'schema (41 tables)')
     n2 = gerar('sql/02_carga.sql', 'college/02_seed.sql', 'deterministic seed data')
+    n2b = gerar('sql/02b_geografia_ibge.sql', 'college/02b_geography_ibge.sql',
+                'IBGE geography: 27 states, 5,570 municipalities')
     n3 = gerar('sql/04_views.sql', 'college/03_views.sql',
                'views and materialized views')
     n4 = gerar('sql/05_volume_legado.sql', 'college/04_legacy_volume.sql',
                'legacy terms 2020-2024, for query-plan evidence')
     print('college/01_schema.sql        %d linhas' % n1)
     print('college/02_seed.sql          %d linhas' % n2)
+    print('college/02b_geography_ibge.sql %d linhas' % n2b)
     print('college/03_views.sql         %d linhas' % n3)
     print('college/04_legacy_volume.sql %d linhas' % n4)

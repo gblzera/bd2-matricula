@@ -15,11 +15,13 @@ e diz quantas vezes CADA instância dela participa do relacionamento.
 
 Uso:  python3 scripts/gerar_modelo_logico.py <banco> <schema> <saida.drawio> "<título da página>"
 
-ATENÇÃO: docs/modelo-tabelas.drawio (p.1) foi ENRIQUECIDO à mão depois de
-gerado — anotações [C#]/[E#], CHECKs por coluna e o painel de normalização
-(1.354 rótulos vs 1.230 da saída crua). NUNCA regenerar por cima dele; para
-conferir sincronia de esquema, gerar num arquivo temporário e comparar.
-docs/modelo-college.drawio é saída crua deste script e pode ser regenerado.
+HISTÓRICO: até 28/09/2026 o docs/modelo-tabelas.drawio era enriquecido à mão
+(anotações [C#]/[E#], CHECKs por coluna, painel de normalização) e este aviso
+dizia para nunca regenerar por cima. A reforma de nomes tb_/vw_/vwm_ de
+28/09 renomeou as 41 tabelas e acrescentou 3 colunas de auditoria em cada uma:
+o enriquecimento ficou irrecuperável e os dois diagramas voltaram a ser saída
+CRUA deste script. Regenerar à vontade; se o enriquecimento for refeito,
+restaurar este aviso no mesmo passo.
 """
 import html, io, sys, subprocess, collections
 

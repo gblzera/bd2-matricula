@@ -2,12 +2,12 @@
 """Gera os seeds de geografia COMPLETA do Brasil (27 estados, 5.570 municípios)
 a partir da lista do IBGE, para os dois bancos:
 
-  sql/02b_geografia_ibge.sql        (matricula — identificadores em português)
+  sql/02b_geografia_ibge.sql        (tb_matricula — identificadores em português)
   college/02b_geography_ibge.sql    (college   — identificadores em inglês)
 
 Fonte dos dados: https://github.com/leogermani/estados-e-municipios-ibge
 (estados.json e municipios.json — espelho da lista oficial do IBGE; o código
-de 7 dígitos do município começa com os 2 dígitos do estado).
+de 7 dígitos do município começa com os 2 dígitos do tb_estado).
 
 Os arquivos gerados são COMMITADOS: a reconstrução do banco continua offline e
 determinística. Rodar este script só quando a fonte mudar.
@@ -64,19 +64,19 @@ CAB = ('-- =====================================================================
 escrever(
     'sql/02b_geografia_ibge.sql',
     CAB.format(arq='02b_geografia_ibge.sql'),
-    ('INSERT INTO estado (id_pais, nome_estado, uf_estado)\n'
+    ('INSERT INTO tb_estado (id_pais, nome_estado, uf_estado)\n'
      "SELECT p.id_pais, v.nome, v.uf\nFROM (VALUES"),
     ['  (%s, %s)' % (q(d['nome']), q(d['sigla'])) for _, d in estados],
     (") AS v(nome, uf)\nJOIN pais p ON p.sigla_pais = 'BR'\n"
      'ON CONFLICT (id_pais, uf_estado) DO NOTHING;'),
-    ('INSERT INTO cidade (id_estado, nome_cidade, codigo_ibge_cidade)\n'
+    ('INSERT INTO tb_cidade (id_estado, nome_cidade, codigo_ibge_cidade)\n'
      'SELECT e.id_estado, v.nome, v.ibge\nFROM (VALUES'),
     ['  (%s, %s, %s)' % (q(cod2uf[c[:2]]), q(nome), q(c)) for c, nome in cidades],
     (") AS v(uf, nome, ibge)\nJOIN estado e ON e.uf_estado = v.uf\n"
      'ON CONFLICT (codigo_ibge_cidade) DO NOTHING;'),
     ('DO $$\nDECLARE n_est int; n_cid int;\nBEGIN\n'
-     '  SELECT count(*) INTO n_est FROM estado;\n'
-     '  SELECT count(*) INTO n_cid FROM cidade;\n'
+     '  SELECT count(*) INTO n_est FROM tb_estado;\n'
+     '  SELECT count(*) INTO n_cid FROM tb_cidade;\n'
      "  IF n_est <> 27   THEN RAISE EXCEPTION 'Geografia: % estados (esperado 27)', n_est; END IF;\n"
      "  IF n_cid <> 5570 THEN RAISE EXCEPTION 'Geografia: % cidades (esperado 5570)', n_cid; END IF;\n"
      "  RAISE NOTICE 'Geografia IBGE OK: % estados, % municípios.', n_est, n_cid;\nEND $$;"))

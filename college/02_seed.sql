@@ -37,21 +37,21 @@
 -- reproduzibilidade das consultas e das evidências de EXPLAIN do Marco 2.
 --
 -- O QUE MUDOU COM A AMPLIAÇÃO (ver docs/modelo-tabelas.drawio, página 2):
---   [E1] geografia: country -> state -> city -> address antes de qualquer campus
---   [E2] person é o supertipo: name/e-mail/CPF/nascimento saíram de student e
---        professor; a carga cria a person e DEPOIS a especialização
---   [E4] app_user espelha a ROLE do PostgreSQL (login = name da role)
---   [E11] o professor da section virou section_professor (titular + auxiliar)
---   [E14] nota_a1/a2/p3 sumiram de academic_record: agora são assessment + grade, e
---        a frequência sai de attendance. academic_record guarda só o CONSOLIDADO.
+--   [E1] geografia: pais -> estado -> cidade -> endereco antes de qualquer campus
+--   [E2] pessoa é o supertipo: name/e-mail/CPF/nascimento saíram de aluno e
+--        professor; a carga cria a pessoa e DEPOIS a especialização
+--   [E4] usuario espelha a ROLE do PostgreSQL (login = name da role)
+--   [E11] o professor da turma virou turma_professor (titular + auxiliar)
+--   [E14] nota_a1/a2/p3 sumiram de historico: agora são avaliacao + nota, e
+--        a frequência sai de presenca. historico guarda só o CONSOLIDADO.
 --
 -- Cenários plantados de propósito (usados pelas consultas e pelo Marco 2):
 --   · TABD-N1 (2026/2) com 8 seats e 7 confirmadas  -> 1 vaga p/ disputa (Marco 2)
 --   · COMP1-N1 (2026/2) semester nenhuma matrícula       -> junção externa (consulta 3)
---   · LBD2-N1 (2026/2) EAD, semester room                -> EXCLUDE parcial [E12]
+--   · LBD2-N1 (2026/2) EAD, semester sala                -> EXCLUDE parcial [E12]
 --   · alunos com 3-4 semestres de notas             -> LAG/evolução (consulta 8)
 --
--- Execução:  docker exec -i bd2_aluno_postgres psql -U bd2 -d enrollment < sql/02_carga.sql
+-- Execução:  docker exec -i bd2_aluno_postgres psql -U bd2 -d matricula < sql/02_carga.sql
 -- ============================================================================
 \set ON_ERROR_STOP on
 
@@ -67,32 +67,32 @@ BEGIN;
 -- Idempotência: limpa dados preservando o esquema. A ordem não importa por
 -- causa do CASCADE, mas a lista é explícita para que uma tabela nova nunca
 -- fique de fora silenciosamente.
-TRUNCATE country, state, city, address, person, phone, person_document,
-         app_user, campus, department, building, room, resource, room_resource,
-         professor, professor_degree, program, program_coordination, curriculum,
-         course, curriculum_course, prerequisite, student,
-         credit_transfer, academic_term, enrollment_window, holiday,
-         section, section_professor, section_schedule, syllabus,
-         syllabus_unit, bibliography, syllabus_bibliography,
-         enrollment, academic_record, enrollment_log, class_meeting, attendance, assessment, grade
+TRUNCATE tb_country, tb_state, tb_city, tb_address, tb_person, tb_phone, tb_person_document,
+         tb_app_user, tb_campus, tb_department, tb_building, tb_room, tb_resource, tb_room_resource,
+         tb_professor, tb_professor_degree, tb_program, tb_program_coordination, tb_curriculum,
+         tb_course, tb_curriculum_course, tb_prerequisite, tb_student,
+         tb_credit_transfer, tb_academic_term, tb_enrollment_window, tb_holiday,
+         tb_section, tb_section_professor, tb_section_schedule, tb_syllabus,
+         tb_syllabus_unit, tb_bibliography, tb_syllabus_bibliography,
+         tb_enrollment, tb_academic_record, tb_audit_log, tb_class_meeting, tb_attendance, tb_assessment, tb_grade
 RESTART IDENTITY CASCADE;
 
 -- ============================================================================
 -- 1. GEOGRAFIA  [E1]
---    A cadeia inteira nasce aqui: nenhum endereço existe semester city, nenhuma
---    city semester state, nenhum state semester país. É o ends do "Brasília" digitado
+--    A cadeia inteira nasce aqui: nenhum endereço existe semester cidade, nenhuma
+--    cidade semester estado, nenhum estado semester país. É o ends do "Brasília" digitado
 --    à mão em cada campus.
 -- ============================================================================
-INSERT INTO country (name, iso_code) VALUES ('Brasil', 'BR');
+INSERT INTO tb_country (name, iso_code) VALUES ('Brasil', 'BR');
 
-INSERT INTO state (country_id, name, abbreviation)
+INSERT INTO tb_state (country_id, name, abbreviation)
 SELECT p.country_id, v.name, v.abbrev
 FROM (VALUES
   ('Distrito Federal', 'DF'), ('Goiás', 'GO'), ('Minas Gerais', 'MG'),
   ('São Paulo', 'SP'),        ('Bahia', 'BA')
-) AS v(name, abbrev), country p;
+) AS v(name, abbrev), tb_country p;
 
-INSERT INTO city (state_id, name, ibge_code)
+INSERT INTO tb_city (state_id, name, ibge_code)
 SELECT e.state_id, v.name, v.ibge
 FROM (VALUES
   ('DF', 'Brasília',        '5300108'),
@@ -105,30 +105,30 @@ FROM (VALUES
   ('SP', 'Campinas',        '3509502'),
   ('BA', 'Salvador',        '2927408')
 ) AS v(abbrev, name, ibge)
-JOIN state e ON e.abbreviation = v.abbrev;
+JOIN tb_state e ON e.abbreviation = v.abbrev;
 
 -- Endereços institucionais (os dois campi)
-INSERT INTO address (city_id, street, number, complement, district, postal_code)
+INSERT INTO tb_address (city_id, street, number, complement, district, postal_code)
 SELECT c.city_id, v.street, v.number, v.complement, v.district, v.postal
 FROM (VALUES
   ('Brasília', 'SEPN 707/907', '1',   'Campus A',   'Asa Norte', '70790075'),
   ('Brasília', 'SGAS 613/614', '255', 'Campus B',   'Asa Sul',   '70200730')
-) AS v(city, street, number, complement, district, postal)
-JOIN city c ON c.name = v.city;
+) AS v(tb_city, street, number, complement, district, postal)
+JOIN tb_city c ON c.name = v.tb_city;
 
-INSERT INTO campus (address_id, name)
+INSERT INTO tb_campus (address_id, name)
 SELECT e.address_id, v.name
 FROM (VALUES
   ('Campus B', 'Asa Sul'),
   ('Campus A', 'Asa Norte')
 ) AS v(complement, name)
-JOIN address e ON e.complement = v.complement;
+JOIN tb_address e ON e.complement = v.complement;
 
 -- ============================================================================
 -- 2. PESSOAS  [E2]
 --    130 pessoas: 10 docentes, 118 discentes... na verdade 120 discentes e 2
 --    servidores técnicos (secretaria e DBA). Toda especialização abaixo
---    (professor, student, app_user) aponta para uma linha daqui.
+--    (professor, aluno, usuario) aponta para uma linha daqui.
 --    Faixas de CPF disjuntas por grupo — reexecução nunca colide, e o
 --    05_volume_legado.sql usa a faixa 2e10, também disjunta.
 -- ============================================================================
@@ -140,10 +140,10 @@ WITH nomes AS (
                'Almeida','Nascimento','Lima','Araujo','Fernandes','Carvalho',
                'Gomes','Martins']                                AS sn
 ),
--- endereços residenciais: 1 por person, distribuídos pelas cidades cadastradas
+-- endereços residenciais: 1 por pessoa, distribuídos pelas cidades cadastradas
 -- (a maioria em Brasília, como manda a realidade de um campus do DF)
 ends AS (
-  INSERT INTO address (city_id, street, number, district, postal_code)
+  INSERT INTO tb_address (city_id, street, number, district, postal_code)
   SELECT c.city_id,
          'Quadra ' || (100 + g.i % 400) || ' Conjunto ' || chr(65 + g.i % 20),
          ((g.i * 7) % 900 + 1)::text,
@@ -152,7 +152,7 @@ ends AS (
          lpad((70000000 + (g.i * 137) % 900000)::text, 8, '0')
   FROM generate_series(1, 132) AS g(i)
   JOIN LATERAL (
-    SELECT city_id FROM city
+    SELECT city_id FROM tb_city
     ORDER BY CASE WHEN g.i % 10 < 7 THEN 0 ELSE 1 END,   -- 70% Brasília
              CASE WHEN g.i % 10 < 7 THEN 0 ELSE (city_id + g.i) % 9 END,
              city_id
@@ -160,7 +160,7 @@ ends AS (
   ) c ON true
   RETURNING address_id
 )
-INSERT INTO person (address_id, name, email, cpf, birth_date)
+INSERT INTO tb_person (address_id, name, email, cpf, birth_date)
 SELECT e.address_id, x.name, x.email, x.cpf, x.nasc
 FROM (
   -- (a) 10 docentes — nomes fixos, os mesmos da carga anterior
@@ -202,63 +202,63 @@ JOIN LATERAL (
                           ELSE 12 + x.position END;
 
 -- Telefones [E3]: um celular principal para todos; fixo adicional a cada 3.
-INSERT INTO phone (person_id, number, is_primary, phone_type)
+INSERT INTO tb_phone (person_id, number, is_primary, phone_type)
 SELECT p.person_id,
        '(61) 9' || lpad(((p.person_id * 81721) % 100000000)::text, 8, '0'),
        true, 'mobile'
-FROM person p;
+FROM tb_person p;
 
-INSERT INTO phone (person_id, number, is_primary, phone_type)
+INSERT INTO tb_phone (person_id, number, is_primary, phone_type)
 SELECT p.person_id,
        '(61) 3' || lpad(((p.person_id * 5417) % 10000000)::text, 7, '0'),
        false, 'home'
-FROM person p
+FROM tb_person p
 WHERE p.person_id % 3 = 0;
 
--- Documentos [E3]: RG para todos (o CPF NÃO entra aqui — é 1:1 com a person
--- e por isso vive em person.cpf [E2]); CNH para uma parte.
-INSERT INTO person_document (person_id, number, issuer, issued_on, document_type)
+-- Documentos [E3]: RG para todos (o CPF NÃO entra aqui — é 1:1 com a pessoa
+-- e por isso vive em pessoa.cpf [E2]); CNH para uma parte.
+INSERT INTO tb_person_document (person_id, number, issuer, issued_on, document_type)
 SELECT p.person_id,
        lpad(((p.person_id * 314159) % 10000000)::text, 7, '0'),
        (ARRAY['SSP/DF','SSP/GO','SSP/MG','SSP/SP','SSP/BA'])[1 + p.person_id % 5],
        p.birth_date + interval '18 years',
        'id_card'
-FROM person p;
+FROM tb_person p;
 
-INSERT INTO person_document (person_id, number, issuer, issued_on, document_type)
+INSERT INTO tb_person_document (person_id, number, issuer, issued_on, document_type)
 SELECT p.person_id,
        lpad(((p.person_id * 2718281) % 100000000000)::text, 11, '0'),
        'DETRAN/DF',
        p.birth_date + interval '20 years',
        'drivers_license'
-FROM person p
+FROM tb_person p
 WHERE p.person_id % 5 = 0;
 
 -- ============================================================================
 -- 3. INFRAESTRUTURA  [E5] [E6]
 -- ============================================================================
-INSERT INTO department (campus_id, name, abbreviation)
+INSERT INTO tb_department (campus_id, name, abbreviation)
 SELECT c.campus_id, v.name, v.abbrev
 FROM (VALUES
   ('Asa Sul',   'Departamento de Ciência da Computação', 'DCC'),
   ('Asa Sul',   'Departamento de Matemática',            'DMAT'),
   ('Asa Norte', 'Departamento de Gestão',                'DGES')
-) AS v(campus, name, abbrev)
-JOIN campus c ON c.name = v.campus;
+) AS v(tb_campus, name, abbrev)
+JOIN tb_campus c ON c.name = v.tb_campus;
 
--- [E5] room não pertence mais ao campus direto: pertence ao PRÉDIO.
-INSERT INTO building (campus_id, name, floor_count)
+-- [E5] sala não pertence mais ao campus direto: pertence ao PRÉDIO.
+INSERT INTO tb_building (campus_id, name, floor_count)
 SELECT c.campus_id, v.name, v.floors
 FROM (VALUES
   ('Asa Sul',   'Bloco A', 4),
   ('Asa Sul',   'Bloco B', 3),
   ('Asa Norte', 'Bloco Único', 5),
   ('Asa Norte', 'Anexo Laboratórios', 2)
-) AS v(campus, name, floors)
-JOIN campus c ON c.name = v.campus;
+) AS v(tb_campus, name, floors)
+JOIN tb_campus c ON c.name = v.tb_campus;
 
--- "T101" existe nos DOIS campi: continua legal, agora por UNIQUE(building, code) [C4→E5]
-INSERT INTO room (building_id, code, floor, capacity, room_type)
+-- "T101" existe nos DOIS campi: continua legal, agora por UNIQUE(predio, code) [C4→E5]
+INSERT INTO tb_room (building_id, code, floor, capacity, room_type)
 SELECT pr.building_id, v.code, v.floor, v.capacity, v.kind::room_type
 FROM (VALUES
   ('Asa Sul',   'Bloco A',            'T101', 1, 60,  'lecture'),
@@ -270,21 +270,21 @@ FROM (VALUES
   ('Asa Norte', 'Bloco Único',        'T101', 1, 50,  'lecture'),
   ('Asa Norte', 'Bloco Único',        'T102', 1, 40,  'lecture'),
   ('Asa Norte', 'Anexo Laboratórios', 'L101', 1, 25,  'lab')
-) AS v(campus, building, code, floor, capacity, kind)
-JOIN campus c  ON c.name = v.campus
-JOIN building pr ON pr.campus_id = c.campus_id AND pr.name = v.building;
+) AS v(tb_campus, tb_building, code, floor, capacity, kind)
+JOIN tb_campus c  ON c.name = v.tb_campus
+JOIN tb_building pr ON pr.campus_id = c.campus_id AND pr.name = v.tb_building;
 
-INSERT INTO resource (name) VALUES
+INSERT INTO tb_resource (name) VALUES
   ('Projetor multimídia'), ('Quadro branco'), ('Ar-condicionado'),
   ('Computadores'), ('Lousa digital');
 
--- Recursos por room: quadro em todas; projetor e ar na maioria; computadores
+-- Recursos por sala: quadro em todas; projetor e ar na maioria; computadores
 -- só em laboratório (a regra que justifica a tabela existir).
-INSERT INTO room_resource (room_id, resource_id, quantity)
+INSERT INTO tb_room_resource (room_id, resource_id, quantity)
 SELECT s.room_id, r.resource_id,
        CASE r.name WHEN 'Computadores' THEN s.capacity ELSE 1 END
-FROM room s
-CROSS JOIN resource r
+FROM tb_room s
+CROSS JOIN tb_resource r
 WHERE (r.name = 'Quadro branco')
    OR (r.name = 'Projetor multimídia' AND s.room_id % 4 <> 0)
    OR (r.name = 'Ar-condicionado'     AND s.room_id % 3 <> 0)
@@ -294,7 +294,7 @@ WHERE (r.name = 'Quadro branco')
 -- ============================================================================
 -- 4. DOCENTES  [E2] [E6]
 -- ============================================================================
-INSERT INTO professor (person_id, department_id, employee_number, work_regime, degree_level)
+INSERT INTO tb_professor (person_id, department_id, employee_number, work_regime, degree_level)
 SELECT p.person_id, d.department_id, v.employee_no, v.regime::work_regime, v.degree_level::degree_level
 FROM (VALUES
   ('marcos.tanaka@iesb.br',   'P0001', 'DCC',  'full_time', 'doctorate'),
@@ -308,15 +308,15 @@ FROM (VALUES
   ('paulo.lima@iesb.br',      'P0009', 'DCC',  'part_time',  'master'),
   ('helena.barros@iesb.br',   'P0010', 'DGES', 'hourly',  'specialization')
 ) AS v(email, employee_no, abbrev, regime, degree_level)
-JOIN person p       ON p.email = v.email
-JOIN department d ON d.abbreviation = v.abbrev;
+JOIN tb_person p       ON p.email = v.email
+JOIN tb_department d ON d.abbreviation = v.abbrev;
 
 -- Formações [E3]: a graduação de todos, e a pós de quem tem título maior.
-INSERT INTO professor_degree (professor_id, program_name, institution, completion_year, degree_level)
+INSERT INTO tb_professor_degree (professor_id, program_name, institution, completion_year, degree_level)
 SELECT pr.professor_id, 'Ciência da Computação',
        (ARRAY['UnB','UFG','USP','UFMG','PUC'])[1 + pr.professor_id % 5],
        1995 + (pr.professor_id * 3) % 15, 'bachelor'
-FROM professor pr
+FROM tb_professor pr
 UNION ALL
 SELECT pr.professor_id,
        CASE pr.degree_level WHEN 'doctorate' THEN 'Doutorado em Informática'
@@ -324,13 +324,13 @@ SELECT pr.professor_id,
                                    ELSE 'Especialização em Banco de Dados' END,
        (ARRAY['UnB','USP','UFRJ','UFPE','UNICAMP'])[1 + (pr.professor_id * 2) % 5],
        2008 + (pr.professor_id * 2) % 14, pr.degree_level
-FROM professor pr
+FROM tb_professor pr
 WHERE pr.degree_level <> 'bachelor';
 
 -- [E6] chefia: a FK circular criada por ALTER, com UNIQUE (um chefe por professor).
-UPDATE department d
+UPDATE tb_department d
 SET head_professor_id = pr.professor_id
-FROM professor pr, person p
+FROM tb_professor pr, tb_person p
 WHERE pr.person_id = p.person_id
   AND (d.abbreviation, p.email) IN (
         ('DCC',  'marcos.tanaka@iesb.br'),
@@ -343,56 +343,56 @@ WHERE pr.person_id = p.person_id
 --    roles com exatamente estes nomes — e f_session_user() liga uma coisa
 --    à outra em tempo de execução, semester tabela de-para separada.
 -- ============================================================================
-INSERT INTO app_user (person_id, login, role)
+INSERT INTO tb_app_user (person_id, login, role)
 SELECT p.person_id, v.login, v.role::user_role
 FROM (VALUES
   ('juliana.freitas@iesb.br', 'registrar',  'registrar'),
-  ('gabriel.paz@iesb.br',     'bd2',         'admin'),        -- o DBA da course
+  ('gabriel.paz@iesb.br',     'bd2',         'admin'),        -- o DBA da disciplina
   ('marcos.tanaka@iesb.br',   'coordinator', 'coordinator')
 ) AS v(email, login, role)
-JOIN person p ON p.email = v.email;
+JOIN tb_person p ON p.email = v.email;
 
 -- ============================================================================
 -- 6. CURSOS, CURRÍCULOS E DISCIPLINAS
 -- ============================================================================
-INSERT INTO program (campus_id, department_id, code, name, total_hours, degree_type, delivery_mode)
+INSERT INTO tb_program (campus_id, department_id, code, name, total_hours, degree_type, delivery_mode)
 SELECT c.campus_id, d.department_id, v.code, v.name, v.hours,
        v.degree::degree_type, v.delivery_mode::delivery_mode
 FROM (VALUES
   ('CC',  'Ciência da Computação',                 3200, 'bachelor', 'Asa Sul',   'DCC',  'on_campus'),
   ('SI',  'Sistemas de Informação',                3000, 'bachelor', 'Asa Sul',   'DCC',  'on_campus'),
   ('ADS', 'Análise e Desenvolvimento de Sistemas', 2400, 'associate',   'Asa Norte', 'DGES', 'hybrid')
-) AS v(code, name, hours, degree, campus, abbrev, delivery_mode)
-JOIN campus c       ON c.name = v.campus
-JOIN department d ON d.abbreviation = v.abbrev;
+) AS v(code, name, hours, degree, tb_campus, abbrev, delivery_mode)
+JOIN tb_campus c       ON c.name = v.tb_campus
+JOIN tb_department d ON d.abbreviation = v.abbrev;
 
 -- [E8] coordenação COM VIGÊNCIA: o EXCLUDE gist garante um coordenador por
--- program a cada instante. O mandato is_closed de CC prova que o histórico cabe
--- na mesma tabela — o que uma coluna id_coordenador em program não permitiria.
-INSERT INTO program_coordination (program_id, professor_id, appointment_ref, validity)
+-- curso a cada instante. O mandato is_closed de CC prova que o histórico cabe
+-- na mesma tabela — o que uma coluna id_coordenador em curso não permitiria.
+INSERT INTO tb_program_coordination (program_id, professor_id, appointment_ref, validity)
 SELECT c.program_id, pr.professor_id, v.ref, v.validity
 FROM (VALUES
   ('CC',  'P0004', 'PORT-2021-014', daterange(DATE '2021-01-01', DATE '2024-01-01', '[)')),
   ('CC',  'P0001', 'PORT-2024-003', daterange(DATE '2024-01-01', NULL, '[)')),
   ('SI',  'P0005', 'PORT-2023-021', daterange(DATE '2023-03-01', NULL, '[)')),
   ('ADS', 'P0010', 'PORT-2022-008', daterange(DATE '2022-08-01', NULL, '[)'))
-) AS v(program, professor_code, ref, validity)
-JOIN program c     ON c.code = v.program
-JOIN professor pr ON pr.employee_number = v.professor_code;
+) AS v(tb_program, professor_code, ref, validity)
+JOIN tb_program c     ON c.code = v.tb_program
+JOIN tb_professor pr ON pr.employee_number = v.professor_code;
 
-INSERT INTO curriculum (program_id, approval_ref, effective_year, is_active)
+INSERT INTO tb_curriculum (program_id, approval_ref, effective_year, is_active)
 SELECT c.program_id, v.ref, v.year, v.is_active
 FROM (VALUES
   ('CC',  'RES-2023-091', 2024, false),   -- matriz antiga (ingressantes 2024/2025)
   ('CC',  'RES-2025-112', 2026, true),    -- matriz vigente
   ('SI',  'RES-2024-077', 2025, true),
   ('ADS', 'RES-2024-078', 2025, true)
-) AS v(program, ref, year, is_active)
-JOIN program c ON c.code = v.program;
+) AS v(tb_program, ref, year, is_active)
+JOIN tb_program c ON c.code = v.tb_program;
 
 -- Catálogo de disciplinas — ch_total é coluna GERADA [C13], não se insere.
--- Cada course agora tem DONO (department) [E6] e ementa.
-INSERT INTO course (department_id, code, name, description, theory_hours, lab_hours)
+-- Cada disciplina agora tem DONO (departamento) [E6] e ementa.
+INSERT INTO tb_course (department_id, code, name, description, theory_hours, lab_hours)
 SELECT d.department_id, v.code, v.name,
        'Ementa de ' || v.name || '. Conteúdo programático detalhado no plano de ensino vigente.',
        v.theory, v.lab
@@ -418,31 +418,16 @@ FROM (VALUES
   ('DCC',  'WEB1',  'Desenvolvimento Web',                  30, 60),
   ('DMAT', 'EST1',  'Probabilidade e Estatística',          60,  0)
 ) AS v(abbrev, code, name, theory, lab)
-JOIN department d ON d.abbreviation = v.abbrev;
+JOIN tb_department d ON d.abbreviation = v.abbrev;
 
--- Cadeia de pré-requisitos (profundidade 4: TABD -> BD2 -> BD1 -> ED1 -> ALG1)
--- e um co-requisito (LBD2 acompanha BD2) — exercitados nas consultas 5 e 6.
-INSERT INTO prerequisite (course_id, required_course_id, link_type)
-SELECT d.course_id, r.course_id, v.link::prerequisite_link
-FROM (VALUES
-  ('ED1',   'ALG1', 'prerequisite'),
-  ('POO1',  'ALG1', 'prerequisite'),
-  ('LFA',   'MAT1', 'prerequisite'),
-  ('BD1',   'ED1',  'prerequisite'),
-  ('SO1',   'ED1',  'prerequisite'),
-  ('IA1',   'ED1',  'prerequisite'),
-  ('IA1',   'MAT1', 'prerequisite'),
-  ('BD2',   'BD1',  'prerequisite'),
-  ('ENG1',  'POO1', 'prerequisite'),
-  ('COMP1', 'LFA',  'prerequisite'),
-  ('COMP1', 'ED1',  'prerequisite'),
-  ('TABD',  'BD2',  'prerequisite'),
-  ('LBD2',  'BD2',  'corequisite')
-) AS v(course_code, requires, link)
-JOIN course d ON d.code = v.course_code
-JOIN course r ON r.code = v.requires;
-
-INSERT INTO curriculum_course (curriculum_id, course_id, term_number, requirement_type)
+-- [E17] Cadeia de pré-requisitos, agora POR CURRÍCULO.
+-- Profundidade 4 na matriz de CC: TABD -> BD2 -> BD1 -> ED1 -> ALG1.
+-- O INSERT roda depois da grade (curriculo_disciplina) porque as duas FKs
+-- compostas exigem que disciplina e requisito já estejam naquela matriz — e
+-- é justamente isso que o modelo passou a garantir.
+-- O co-requisito LBD2/BD2 saiu junto com a coluna `link`.
+-- Fica logo abaixo do bloco da grade.
+INSERT INTO tb_curriculum_course (curriculum_id, course_id, term_number, requirement_type)
 SELECT cu.curriculum_id, d.course_id, v.term, v.kind::requirement_type
 FROM (VALUES
   -- CC 2026 (vigente)
@@ -477,15 +462,40 @@ FROM (VALUES
   ('ADS', 2025, 'POO1', 2, 'required'), ('ADS', 2025, 'WEB1', 2, 'required'),
   ('ADS', 2025, 'BD1',  3, 'required'), ('ADS', 2025, 'RED1', 3, 'required'),
   ('ADS', 2025, 'GPI',  4, 'required'), ('ADS', 2025, 'EMP',  4, 'free_elective')
-) AS v(program, year, course_code, term, kind)
-JOIN program c      ON c.code = v.program
-JOIN curriculum cu ON cu.program_id = c.program_id AND cu.effective_year = v.year
-JOIN course d ON d.code = v.course_code;
+) AS v(tb_program, year, course_code, term, kind)
+JOIN tb_program c      ON c.code = v.tb_program
+JOIN tb_curriculum cu ON cu.program_id = c.program_id AND cu.effective_year = v.year
+JOIN tb_course d ON d.code = v.course_code;
+
+-- A mesma aresta vale em toda matriz onde as DUAS matérias existem. O último
+-- JOIN é o que garante isso: se o requisito não está naquele currículo, a
+-- linha simplesmente não é gerada — espelhando a restrição que o modelo impõe.
+INSERT INTO tb_prerequisite (curriculum_id, course_id, required_course_id)
+SELECT cd.curriculum_id, d.course_id, r.course_id
+FROM (VALUES
+  ('ED1',   'ALG1'),
+  ('POO1',  'ALG1'),
+  ('LFA',   'MAT1'),
+  ('BD1',   'ED1'),
+  ('SO1',   'ED1'),
+  ('IA1',   'ED1'),
+  ('IA1',   'MAT1'),
+  ('BD2',   'BD1'),
+  ('ENG1',  'POO1'),
+  ('COMP1', 'LFA'),
+  ('COMP1', 'ED1'),
+  ('TABD',  'BD2')
+) AS v(course_code, requires)
+JOIN tb_course d ON d.code = v.course_code
+JOIN tb_course r ON r.code = v.requires
+JOIN tb_curriculum_course cd ON cd.course_id = d.course_id
+JOIN tb_curriculum_course cr ON cr.curriculum_id = cd.curriculum_id
+                               AND cr.course_id = r.course_id;
 
 -- ============================================================================
 -- 7. CALENDÁRIO  [E9] [E10]
 -- ============================================================================
-INSERT INTO academic_term (year, semester, start_date, end_date) VALUES
+INSERT INTO tb_academic_term (year, semester, start_date, end_date) VALUES
   (2025, 1, DATE '2025-02-03', DATE '2025-07-05'),
   (2025, 2, DATE '2025-08-04', DATE '2025-12-20'),
   (2026, 1, DATE '2026-02-02', DATE '2026-07-04'),
@@ -494,23 +504,23 @@ INSERT INTO academic_term (year, semester, start_date, end_date) VALUES
 -- [E9] janelas de matrícula: o EXCLUDE gist impede duas janelas do MESMO kind
 -- se sobreporem no mesmo período. Tipos diferentes PODEM conviver — e convivem:
 -- o ajuste começa antes de a matrícula terminar, de propósito.
-INSERT INTO enrollment_window (academic_term_id, description, window_range, window_type)
+INSERT INTO tb_enrollment_window (academic_term_id, description, window_range, window_type)
 SELECT pl.academic_term_id, v.description,
        tstzrange(
          (pl.start_date + v.starts)::timestamptz,
          (pl.start_date + v.ends)::timestamptz, '[)'),
        v.kind::enrollment_window_type
-FROM academic_term pl
+FROM tb_academic_term pl
 CROSS JOIN (VALUES
-  ('Matrícula regular',   -30, -10, 'enrollment'),
+  ('Matrícula regular',   -30, -10, 'matricula'),
   ('Rematrícula',         -45, -30, 're_enrollment'),
   ('Ajuste de matrícula', -12,   7, 'adjustment'),
   ('Trancamento',          15,  60, 'withdrawal')
 ) AS v(description, starts, ends, kind);
 
--- [E10] holiday por ARCO EXCLUSIVO: exatamente uma das 4 FKs preenchida.
+-- [E10] feriado por ARCO EXCLUSIVO: exatamente uma das 4 FKs preenchida.
 -- O "kind" (nacional/estadual/…) NÃO é coluna: seria derivável do arco (3FN).
-INSERT INTO holiday (country_id, description, holiday_date, is_optional)
+INSERT INTO tb_holiday (country_id, description, holiday_date, is_optional)
 SELECT p.country_id, v.description, v.date::date, v.is_optional
 FROM (VALUES
   ('2026-09-07', 'Independência do Brasil',    false),
@@ -523,24 +533,24 @@ FROM (VALUES
   ('2025-11-15', 'Proclamação da República',   false),
   ('2026-02-16', 'Carnaval',                   true),
   ('2026-04-03', 'Sexta-feira Santa',          false)
-) AS v(date, description, is_optional), country p;
+) AS v(date, description, is_optional), tb_country p;
 
-INSERT INTO holiday (state_id, description, holiday_date, is_optional)
+INSERT INTO tb_holiday (state_id, description, holiday_date, is_optional)
 SELECT e.state_id, 'Dia do Evangélico (DF)', DATE '2026-11-30', false
-FROM state e WHERE e.abbreviation = 'DF';
+FROM tb_state e WHERE e.abbreviation = 'DF';
 
-INSERT INTO holiday (city_id, description, holiday_date, is_optional)
+INSERT INTO tb_holiday (city_id, description, holiday_date, is_optional)
 SELECT c.city_id, 'Aniversário de Brasília', DATE '2026-04-21', false
-FROM city c WHERE c.name = 'Brasília';
+FROM tb_city c WHERE c.name = 'Brasília';
 
-INSERT INTO holiday (campus_id, description, holiday_date, is_optional)
+INSERT INTO tb_holiday (campus_id, description, holiday_date, is_optional)
 SELECT c.campus_id, 'Dia do Folclore — evento interno', DATE '2026-08-22', true
-FROM campus c WHERE c.name = 'Asa Norte';
+FROM tb_campus c WHERE c.name = 'Asa Norte';
 
 -- ============================================================================
 -- 8. TURMAS, DOCÊNCIA E HORÁRIOS  [E11] [E12]
 -- ============================================================================
-INSERT INTO section (course_id, academic_term_id, code, seats, shift, delivery_mode)
+INSERT INTO tb_section (course_id, academic_term_id, code, seats, shift, delivery_mode)
 SELECT d.course_id, pl.academic_term_id, v.code, v.seats,
        v.shift::shift, v.delivery_mode::delivery_mode
 FROM (VALUES
@@ -580,20 +590,20 @@ FROM (VALUES
   (2026, 2, 'LFA',   'LFA-M1',   'morning', 35, 'on_campus'),
   (2026, 2, 'TABD',  'TABD-N1',  'evening',   8, 'on_campus'),  -- disputa da última vaga (Marco 2)
   (2026, 2, 'COMP1', 'COMP1-N1', 'evening',  25, 'on_campus'),  -- ficará SEM matrículas (consulta 3)
-  (2026, 2, 'LBD2',  'LBD2-N1',  'evening',  20, 'online'),         -- EAD: semester room [E12]
+  (2026, 2, 'LBD2',  'LBD2-N1',  'evening',  20, 'online'),         -- EAD: semester sala [E12]
   (2026, 2, 'WEB1',  'WEB1-M1',  'morning', 30, 'on_campus')
 ) AS v(year, semester, course_code, code, shift, seats, delivery_mode)
-JOIN academic_term pl ON pl.year = v.year AND pl.semester = v.semester
-JOIN course d      ON d.code = v.course_code;
+JOIN tb_academic_term pl ON pl.year = v.year AND pl.semester = v.semester
+JOIN tb_course d      ON d.code = v.course_code;
 
--- [E11] co-docência: o titular (um só por section, garantido por índice parcial
+-- [E11] co-docência: o titular (um só por turma, garantido por índice parcial
 -- único) e, nas turmas com prática, um auxiliar. Era uma coluna professor_id
--- em section; virou tabela porque a realidade tem mais de um docente.
-INSERT INTO section_professor (section_id, professor_id, hours, teaching_role)
+-- em turma; virou tabela porque a realidade tem mais de um docente.
+INSERT INTO tb_section_professor (section_id, professor_id, hours, teaching_role)
 SELECT t.section_id, pr.professor_id, d.total_hours, 'lead'
-FROM section t
-JOIN course d ON d.course_id = t.course_id
-JOIN professor pr ON pr.employee_number = (CASE d.code
+FROM tb_section t
+JOIN tb_course d ON d.course_id = t.course_id
+JOIN tb_professor pr ON pr.employee_number = (CASE d.code
         WHEN 'ALG1'  THEN 'P0001' WHEN 'MAT1'  THEN 'P0002' WHEN 'ED1'   THEN 'P0003'
         WHEN 'POO1'  THEN 'P0004' WHEN 'BD1'   THEN 'P0005' WHEN 'ETI'   THEN 'P0006'
         WHEN 'SO1'   THEN 'P0007' WHEN 'LFA'   THEN 'P0008' WHEN 'EST1'  THEN 'P0002'
@@ -603,13 +613,13 @@ JOIN professor pr ON pr.employee_number = (CASE d.code
         WHEN 'GPI'   THEN 'P0010' ELSE 'P0009' END);
 
 -- auxiliar nas turmas com carga prática (o laboratório precisa de dois)
-INSERT INTO section_professor (section_id, professor_id, hours, teaching_role)
+INSERT INTO tb_section_professor (section_id, professor_id, hours, teaching_role)
 SELECT t.section_id, pr.professor_id, d.lab_hours, 'assistant'
-FROM section t
-JOIN course d ON d.course_id = t.course_id AND d.lab_hours >= 30
+FROM tb_section t
+JOIN tb_course d ON d.course_id = t.course_id AND d.lab_hours >= 30
 JOIN LATERAL (
-  SELECT p2.professor_id FROM professor p2
-  WHERE p2.professor_id <> (SELECT tp.professor_id FROM section_professor tp
+  SELECT p2.professor_id FROM tb_professor p2
+  WHERE p2.professor_id <> (SELECT tp.professor_id FROM tb_section_professor tp
                             WHERE tp.section_id = t.section_id AND tp.teaching_role = 'lead')
   ORDER BY (p2.professor_id + t.section_id) % 10, p2.professor_id
   LIMIT 1
@@ -617,22 +627,22 @@ JOIN LATERAL (
 WHERE t.section_id % 2 = 0;
 
 -- ----------------------------------------------------------------------------
--- Horários: 2 encontros semanais por section, gerados deterministicamente.
--- Combinações (par de dias × faixa) e room rotacionada por rn garantem que a
+-- Horários: 2 encontros semanais por turma, gerados deterministicamente.
+-- Combinações (par de dias × faixa) e sala rotacionada por rn garantem que a
 -- restrição de exclusão [C10] passe. Faixas: matutino 08:00/10:00, noturno
 -- 19:00/20:50 — duração 1h40.
--- [E12] section EAD entra com room_id NULL: o EXCLUDE de room é PARCIAL
+-- [E12] turma EAD entra com room_id NULL: o EXCLUDE de sala é PARCIAL
 -- (WHERE room_id IS NOT NULL), então dois horários EAD convivem semester choque.
 -- ----------------------------------------------------------------------------
 WITH t AS (
   SELECT tu.section_id, tu.academic_term_id, tu.shift, tu.delivery_mode,
          row_number() OVER (PARTITION BY tu.academic_term_id, tu.shift
                             ORDER BY tu.code) - 1 AS rn
-  FROM section tu
+  FROM tb_section tu
 ), s AS (
-  SELECT room_id, row_number() OVER (ORDER BY room_id) - 1 AS sn FROM room
+  SELECT room_id, row_number() OVER (ORDER BY room_id) - 1 AS sn FROM tb_room
 )
-INSERT INTO section_schedule (section_id, academic_term_id, room_id, weekday, time_range, meeting_type)
+INSERT INTO tb_section_schedule (section_id, academic_term_id, room_id, weekday, time_range, meeting_type)
 SELECT t.section_id, t.academic_term_id,
        CASE WHEN t.delivery_mode = 'online' THEN NULL ELSE s.room_id END,
        d.day,
@@ -644,8 +654,8 @@ SELECT t.section_id, t.academic_term_id,
        END AS faixa,
        CASE WHEN d.position = 2 AND dd.lab_hours > 0 THEN 'lab_session' ELSE 'lecture' END::meeting_type
 FROM t
-JOIN section tu     ON tu.section_id = t.section_id
-JOIN course dd ON dd.course_id = tu.course_id
+JOIN tb_section tu     ON tu.section_id = t.section_id
+JOIN tb_course dd ON dd.course_id = tu.course_id
 JOIN s ON s.sn = t.rn % 9                                   -- 9 salas cadastradas
 CROSS JOIN LATERAL (VALUES
   (1, CASE WHEN t.rn % 2 = 0 THEN 1 ELSE 2 END),            -- seg ou ter
@@ -654,12 +664,12 @@ CROSS JOIN LATERAL (VALUES
 
 -- ============================================================================
 -- 9. PLANOS DE ENSINO  [E7]
---    O plano PERTENCE À DISCIPLINA (section_id NULL = plano base). Uma section
+--    O plano PERTENCE À DISCIPLINA (section_id NULL = plano base). Uma turma
 --    pode ter a SUA versão — e a FK composta garante que a versão só existe
---    para uma section DAQUELA course. UNIQUE NULLS NOT DISTINCT impede um
+--    para uma turma DAQUELA disciplina. UNIQUE NULLS NOT DISTINCT impede um
 --    segundo plano base [técnica de C9].
 -- ============================================================================
-INSERT INTO syllabus (course_id, section_id, objective, methodology, grading_criteria, approved_on)
+INSERT INTO tb_syllabus (course_id, section_id, objective, methodology, grading_criteria, approved_on)
 SELECT d.course_id, NULL,
        'Capacitar o estudante em ' || d.name || ', articulando teoria e prática.',
        CASE WHEN d.lab_hours > 0
@@ -667,35 +677,35 @@ SELECT d.course_id, NULL,
             ELSE 'Aulas expositivas dialogadas, estudos dirigidos e seminários.' END,
        'Duas avaliações (A1 peso 4, A2 peso 6) e prova substitutiva conforme regimento.',
        DATE '2025-01-15'
-FROM course d;
+FROM tb_course d;
 
--- Versão de section para as ofertas de 2026/2 de BD2 e TABD: é o caso que
+-- Versão de turma para as ofertas de 2026/2 de BD2 e TABD: é o caso que
 -- justifica section_id na tabela — o mesmo plano base, adaptado à oferta.
-INSERT INTO syllabus (course_id, section_id, objective, methodology, grading_criteria, approved_on)
+INSERT INTO tb_syllabus (course_id, section_id, objective, methodology, grading_criteria, approved_on)
 SELECT t.course_id, t.section_id,
        'Versão 2026/2 do plano de ' || d.name || ': ênfase em PostgreSQL 17.',
        'Aulas expositivas, laboratório com contêiner Docker e projeto em dupla.',
        'A1 (peso 4) sobre modelagem; A2 (peso 6) sobre implementação; substitutiva conforme regimento.',
        DATE '2026-07-20'
-FROM section t
-JOIN course d      ON d.course_id = t.course_id
-JOIN academic_term pl ON pl.academic_term_id = t.academic_term_id
+FROM tb_section t
+JOIN tb_course d      ON d.course_id = t.course_id
+JOIN tb_academic_term pl ON pl.academic_term_id = t.academic_term_id
 WHERE pl.year = 2026 AND pl.semester = 2
   AND d.code IN ('BD2', 'TABD');
 
--- Unidades do plano base: 4 por course, somando a CH total da course.
-INSERT INTO syllabus_unit (syllabus_id, title, content, position, hours)
+-- Unidades do plano base: 4 por disciplina, somando a CH total da disciplina.
+INSERT INTO tb_syllabus_unit (syllabus_id, title, content, position, hours)
 SELECT pe.syllabus_id,
        'Unidade ' || u.position || ' — ' || d.code,
        'Conteúdo da unidade ' || u.position || ' de ' || d.name || '.',
        u.position,
        (d.total_hours / 4) + CASE WHEN u.position <= d.total_hours % 4 THEN 1 ELSE 0 END
-FROM syllabus pe
-JOIN course d ON d.course_id = pe.course_id
+FROM tb_syllabus pe
+JOIN tb_course d ON d.course_id = pe.course_id
 CROSS JOIN generate_series(1, 4) AS u(position)
 WHERE pe.section_id IS NULL;
 
-INSERT INTO bibliography (title, author, publisher, isbn, year, edition) VALUES
+INSERT INTO tb_bibliography (title, author, publisher, isbn, year, edition) VALUES
   ('Sistemas de Banco de Dados',            'Elmasri, R.; Navathe, S.', 'Pearson',       '9788579361852', 2011, 6),
   ('Sistema de Banco de Dados',             'Silberschatz, A.',         'Elsevier',      '9788535245356', 2012, 6),
   ('Projeto de Banco de Dados',             'Heuser, C. A.',            'Bookman',       '9788577803828', 2009, 6),
@@ -710,13 +720,13 @@ INSERT INTO bibliography (title, author, publisher, isbn, year, edition) VALUES
   ('Estatística Básica',                    'Bussab, W. O.; Morettin, P.','Saraiva',     '9788502207998', 2013, 8);
 
 -- Bibliografia por plano: uma básica e uma complementar, escolhidas de forma
--- determinística — a chave (plano, bibliography) impede repetir o mesmo título.
-INSERT INTO syllabus_bibliography (syllabus_id, bibliography_id, reference_type)
+-- determinística — a chave (plano, bibliografia) impede repetir o mesmo título.
+INSERT INTO tb_syllabus_bibliography (syllabus_id, bibliography_id, reference_type)
 SELECT pe.syllabus_id, b.bibliography_id, v.kind::reference_type
-FROM syllabus pe
+FROM tb_syllabus pe
 CROSS JOIN (VALUES ('core', 0), ('supplementary', 5)) AS v(kind, deslo)
 JOIN LATERAL (
-  SELECT bibliography_id FROM bibliography
+  SELECT bibliography_id FROM tb_bibliography
   ORDER BY ((bibliography_id + pe.syllabus_id + v.deslo) % 12), bibliography_id
   LIMIT 1
 ) b ON true
@@ -725,13 +735,13 @@ ON CONFLICT (syllabus_id, bibliography_id) DO NOTHING;
 
 -- ============================================================================
 -- 10. DISCENTES  [E2]
---     120 alunos, cada um apontando para a person já criada. O currículo é
---     coerente com o program — a FK composta [C6] exige.
+--     120 alunos, cada um apontando para a pessoa já criada. O currículo é
+--     coerente com o curso — a FK composta [C6] exige.
 -- ============================================================================
-INSERT INTO student (person_id, program_id, curriculum_id, enrollment_number, admission_date, admission_type, status)
+INSERT INTO tb_student (person_id, program_id, curriculum_id, enrollment_number, admission_type, status)
 SELECT p.person_id, c.program_id, cu.curriculum_id,
+       -- o RA carrega o year de ingresso: 2024 * 10000 + i  ->  "20240036" [E18]
        (b.ano_ing * 10000 + b.i)::text,
-       make_date(b.ano_ing, 2, 1),
        (ARRAY['entrance_exam','national_exam','transfer','second_degree'])[1 + b.i % 4]::admission_type,
        CASE WHEN b.i % 17 = 0 THEN 'suspended' ELSE 'active' END::student_status
 FROM (
@@ -740,7 +750,7 @@ FROM (
               WHEN g.i % 10 < 9 THEN 'SI'
               ELSE 'ADS' END AS curso_cod,
          2024 + (g.i % 3)     AS ano_ing,
-         -- o e-mail é a chave natural que liga o student i à person criada no
+         -- o e-mail é a chave natural que liga o aluno i à pessoa criada no
          -- passo 2: a MESMA expressão, para não depender de ordem de id
          lower(n.pn[1 + (g.i * 7) % 20] || '.' || n.sn[1 + (g.i * 13) % 15]) || g.i || '@aluno.iesb.br' AS email
   FROM generate_series(1, 120) AS g(i),
@@ -751,41 +761,42 @@ FROM (
                      'Almeida','Nascimento','Lima','Araujo','Fernandes','Carvalho',
                      'Gomes','Martins']                                AS sn) n
 ) b
-JOIN person p ON p.email = b.email
-JOIN program c  ON c.code = b.curso_cod
-JOIN curriculum cu
+JOIN tb_person p ON p.email = b.email
+JOIN tb_program c  ON c.code = b.curso_cod
+JOIN tb_curriculum cu
   ON cu.program_id = c.program_id
  AND cu.effective_year = CASE
        WHEN b.curso_cod = 'CC' AND b.ano_ing >= 2026 THEN 2026
        WHEN b.curso_cod = 'CC'                       THEN 2024
        ELSE 2025 END;
 
--- Um usuário por student [E4]: login = 'al_' || RA, o mesmo name que o
+-- Um usuário por aluno [E4]: login = 'al_' || RA, o mesmo name que o
 -- 08_seguranca.sql dá à ROLE. É essa igualdade que a RLS usa.
-INSERT INTO app_user (person_id, login, is_active, role)
-SELECT a.person_id, 'al_' || a.enrollment_number, (a.status = 'active'), 'student'
-FROM student a;
+INSERT INTO tb_app_user (person_id, login, is_active, role)
+SELECT a.person_id, 'al_' || a.enrollment_number, (a.status = 'active'), 'aluno'
+FROM tb_student a;
 
 -- ============================================================================
 -- 11. MATRÍCULAS
---     Elegibilidade realista: o student só se enrollment em section cuja course
+--     Elegibilidade realista: o aluno só se matricula em turma cuja disciplina
 --     pertence ao SEU currículo e cujo período começa depois do seu ingresso.
---     Seleção determinística por hash; no máximo 1 section por course/período
---     por student; lotação alvo ~75% das seats (máx. 28 por section).
+--     Seleção determinística por hash; no máximo 1 turma por disciplina/período
+--     por aluno; lotação alvo ~75% das seats (máx. 28 por turma).
 -- ============================================================================
 WITH pool AS (
   SELECT tu.section_id AS section_id, tu.code, tu.seats, tu.academic_term_id,
          tu.course_id, a.student_id AS student_id, pl.start_date,
          (a.student_id * 31 + tu.section_id * 17) % 997 AS h
-  FROM section tu
-  JOIN academic_term pl       ON pl.academic_term_id = tu.academic_term_id
-  JOIN curriculum_course cd ON cd.course_id = tu.course_id
-  JOIN student a                 ON a.curriculum_id = cd.curriculum_id
+  FROM tb_section tu
+  JOIN tb_academic_term pl       ON pl.academic_term_id = tu.academic_term_id
+  JOIN tb_curriculum_course cd ON cd.course_id = tu.course_id
+  JOIN tb_student a                 ON a.curriculum_id = cd.curriculum_id
                               AND a.status = 'active'
-                              AND a.admission_date <= pl.start_date
+                              -- year de ingresso vem do RA [E18]
+                              AND left(a.enrollment_number, 4)::int <= pl.year
   WHERE tu.code <> 'COMP1-N1'          -- deixada vazia de propósito (consulta 3)
 ),
-sem_duplicata AS (                       -- 1 section por (student, período, course)
+sem_duplicata AS (                       -- 1 turma por (aluno, período, disciplina)
   SELECT *,
          row_number() OVER (PARTITION BY student_id, academic_term_id, course_id
                             ORDER BY h, section_id) AS r1
@@ -797,7 +808,7 @@ ranqueado AS (
   FROM sem_duplicata
   WHERE r1 = 1
 )
-INSERT INTO enrollment (student_id, section_id, enrolled_at, status)
+INSERT INTO tb_enrollment (student_id, section_id, enrolled_at, status)
 SELECT r.student_id,
        r.section_id,
        (r.start_date - 10)::timestamptz + make_interval(hours => (r.rk * 3)::int),
@@ -814,16 +825,16 @@ WHERE r.rk <= CASE WHEN r.code = 'TABD-N1'
 
 -- ============================================================================
 -- 12. AVALIAÇÕES E NOTAS  [E14]
---     Onde antes havia nota_a1/nota_a2/nota_p3 em academic_record (colunas fixas,
---     violação de 1FN disfarçada), agora há assessment × grade. Pesos das
+--     Onde antes havia nota_a1/nota_a2/nota_p3 em historico (colunas fixas,
+--     violação de 1FN disfarçada), agora há avaliacao × nota. Pesos das
 --     avaliações REGULARES somam 10; a substitutiva não entra na soma —
---     ela SUBSTITUI a de menor grade, que é a regra da P3 do modelo original.
+--     ela SUBSTITUI a de menor nota, que é a regra da P3 do modelo original.
 -- ============================================================================
-INSERT INTO assessment (section_id, name, weight, assessment_date, is_makeup)
+INSERT INTO tb_assessment (section_id, name, weight, assessment_date, is_makeup)
 SELECT t.section_id, v.name, v.weight,
        pl.start_date + v.day, v.is_makeup
-FROM section t
-JOIN academic_term pl ON pl.academic_term_id = t.academic_term_id
+FROM tb_section t
+JOIN tb_academic_term pl ON pl.academic_term_id = t.academic_term_id
 CROSS JOIN (VALUES
   ('A1', 4.00,  60, false),
   ('A2', 6.00, 120, false),
@@ -832,18 +843,18 @@ CROSS JOIN (VALUES
 
 -- Notas: só para períodos ENCERRADOS (< 2026/2) e matrículas confirmadas.
 -- As fórmulas são as mesmas da carga anterior — a média continua reproduzível.
-INSERT INTO grade (assessment_id, enrollment_id, section_id, value)
+INSERT INTO tb_grade (assessment_id, enrollment_id, section_id, value)
 SELECT av.assessment_id, m.enrollment_id, m.section_id,
        CASE av.name
          WHEN 'A1' THEN round((3   + ((m.student_id * 37 + m.section_id * 11) % 71) / 10.0)::numeric, 1)
          WHEN 'A2' THEN round((3.5 + ((m.student_id * 29 + m.section_id * 13) % 66) / 10.0)::numeric, 1)
          ELSE           round((4   + ((m.student_id * 41 + m.section_id * 7)  % 56) / 10.0)::numeric, 1)
        END
-FROM enrollment m
-JOIN section tu          ON tu.section_id = m.section_id
-JOIN academic_term pl ON pl.academic_term_id = tu.academic_term_id
+FROM tb_enrollment m
+JOIN tb_section tu          ON tu.section_id = m.section_id
+JOIN tb_academic_term pl ON pl.academic_term_id = tu.academic_term_id
                       AND (pl.year, pl.semester) < (2026, 2)
-JOIN assessment av      ON av.section_id = m.section_id
+JOIN tb_assessment av      ON av.section_id = m.section_id
 WHERE m.status = 'confirmed'
   AND (
     NOT av.is_makeup                       -- A1 e A2 para todos
@@ -857,17 +868,17 @@ WHERE m.status = 'confirmed'
 -- ============================================================================
 -- 13. AULAS E PRESENÇAS  [E13]
 --     A frequência deixou de ser um número digitado: ela EMERGE das presenças.
---     Aula pula holiday — a regra que o modelo do professor não conseguia
---     expressar porque não tinha class_meeting nenhuma.
+--     Aula pula feriado — a regra que o modelo do professor não conseguia
+--     expressar porque não tinha aula nenhuma.
 -- ============================================================================
-INSERT INTO class_meeting (section_schedule_id, syllabus_unit_id, section_id, topic, meeting_date, was_held)
+INSERT INTO tb_class_meeting (section_schedule_id, syllabus_unit_id, section_id, topic, meeting_date, was_held)
 SELECT th.section_schedule_id, u.syllabus_unit_id, th.section_id,
        'Encontro ' || dt.n || ' — ' || d.code,
        dt.date, true
-FROM section_schedule th
-JOIN section t           ON t.section_id = th.section_id
-JOIN course d      ON d.course_id = t.course_id
-JOIN academic_term pl ON pl.academic_term_id = th.academic_term_id
+FROM tb_section_schedule th
+JOIN tb_section t           ON t.section_id = th.section_id
+JOIN tb_course d      ON d.course_id = t.course_id
+JOIN tb_academic_term pl ON pl.academic_term_id = th.academic_term_id
 CROSS JOIN LATERAL (
   -- 18 semanas a partir do primeiro day da semana pedido pelo horário
   SELECT row_number() OVER (ORDER BY g.d) AS n, g.d AS date
@@ -879,23 +890,23 @@ CROSS JOIN LATERAL (
 ) dt
 LEFT JOIN LATERAL (                                  -- distribui as 4 unidades
   SELECT ue.syllabus_unit_id
-  FROM syllabus pe
-  JOIN syllabus_unit ue ON ue.syllabus_id = pe.syllabus_id
+  FROM tb_syllabus pe
+  JOIN tb_syllabus_unit ue ON ue.syllabus_id = pe.syllabus_id
   WHERE pe.course_id = t.course_id AND pe.section_id IS NULL
     AND ue.position = LEAST(4, 1 + ((dt.n - 1) / 5))
   LIMIT 1
 ) u ON true
-WHERE NOT EXISTS (                                   -- não há class_meeting em holiday
-  SELECT 1 FROM holiday f
+WHERE NOT EXISTS (                                   -- não há aula em feriado
+  SELECT 1 FROM tb_holiday f
   WHERE f.holiday_date = dt.date AND NOT f.is_optional
 );
 
--- Presenças: toda matrícula confirmada em toda class_meeting da sua section.
+-- Presenças: toda matrícula confirmada em toda aula da sua turma.
 -- A falta é determinística e é ela que produz a frequência. Dois regimes de
 -- propósito: a maioria falta ~5% (aprova por frequência) e um em cada 11
 -- alunos falta ~33% — abaixo dos 75% exigidos. É esse grupo que faz existir
 -- a situação 'failed_attendance', usada pelas consultas 4 e 10.
-INSERT INTO attendance (class_meeting_id, enrollment_id, section_id, was_present, is_excused)
+INSERT INTO tb_attendance (class_meeting_id, enrollment_id, section_id, was_present, is_excused)
 SELECT a.class_meeting_id, m.enrollment_id, m.section_id,
        CASE WHEN m.student_id % 11 = 0
             THEN ((m.student_id * 7 + a.class_meeting_id * 3) % 3)  <> 0
@@ -903,20 +914,20 @@ SELECT a.class_meeting_id, m.enrollment_id, m.section_id,
        CASE WHEN m.student_id % 11 = 0
             THEN ((m.student_id * 7 + a.class_meeting_id * 3) % 3)  = 0 AND (m.student_id % 4 = 0)
             ELSE ((m.student_id * 7 + a.class_meeting_id * 3) % 20) = 0 AND (m.student_id % 4 = 0) END
-FROM class_meeting a
-JOIN enrollment m       ON m.section_id = a.section_id AND m.status = 'confirmed'
-JOIN section t           ON t.section_id = a.section_id
-JOIN academic_term pl ON pl.academic_term_id = t.academic_term_id
+FROM tb_class_meeting a
+JOIN tb_enrollment m       ON m.section_id = a.section_id AND m.status = 'confirmed'
+JOIN tb_section t           ON t.section_id = a.section_id
+JOIN tb_academic_term pl ON pl.academic_term_id = t.academic_term_id
                       AND (pl.year, pl.semester) < (2026, 2);
 
 -- ============================================================================
 -- 14. HISTÓRICO CONSOLIDADO  [E14]
---     academic_record não guarda mais grade nem frequência: guarda a SITUAÇÃO e a
---     date de fechamento. Média e frequência são derivadas de grade/attendance —
+--     historico não guarda mais nota nem frequência: guarda a SITUAÇÃO e a
+--     date de fechamento. Média e frequência são derivadas de nota/presenca —
 --     é esse o custo assumido da ampliação, e a MV do 04_views.sql é a
 --     resposta a ele.
 -- ============================================================================
-INSERT INTO academic_record (enrollment_id, closed_on, outcome)
+INSERT INTO tb_academic_record (enrollment_id, closed_on, outcome)
 SELECT m.enrollment_id,
        CASE WHEN x.is_closed THEN pl.end_date END,
        CASE
@@ -926,13 +937,13 @@ SELECT m.enrollment_id,
          WHEN x.avg_grade >= 5                    THEN 'passed'
          ELSE 'failed_grade'
        END::academic_outcome
-FROM enrollment m
-JOIN section tu          ON tu.section_id = m.section_id
-JOIN academic_term pl ON pl.academic_term_id = tu.academic_term_id
+FROM tb_enrollment m
+JOIN tb_section tu          ON tu.section_id = m.section_id
+JOIN tb_academic_term pl ON pl.academic_term_id = tu.academic_term_id
 -- média e frequência vêm da MESMA view que as consultas usam
--- (v_enrollment_performance, criada no 01_ddl.sql [E14]): a regra da
+-- (desempenho_matricula, criada no 01_ddl.sql [E14]): a regra da
 -- substitutiva não pode divergir entre a carga e o relatório.
-LEFT JOIN v_enrollment_performance dm ON dm.enrollment_id = m.enrollment_id
+LEFT JOIN vw_enrollment_performance dm ON dm.enrollment_id = m.enrollment_id
 CROSS JOIN LATERAL (
   SELECT (pl.year, pl.semester) < (2026, 2) AS is_closed,
          dm.final_grade AS avg_grade,
@@ -945,7 +956,7 @@ WHERE m.status <> 'cancelled';
 --     Dispensa por estudo anterior: entra como 2ª via de "pode cursar".
 --     Um caso de cada status, para as consultas terem o que mostrar.
 -- ============================================================================
-INSERT INTO credit_transfer (student_id, course_id, reviewer_id,
+INSERT INTO tb_credit_transfer (student_id, course_id, reviewer_id,
        source_course, source_institution,
        review_note, source_hours,
        source_grade, requested_on,
@@ -967,39 +978,22 @@ FROM (VALUES
   ('SIG',  'denied', 4), ('EST1', 'denied', 5),
   ('WEB1', 'pending',   6), ('GPI',  'pending',   7), ('ALG1', 'pending',   8)
 ) AS v(course_code, status, position)
-JOIN course d ON d.code = v.course_code
+JOIN tb_course d ON d.code = v.course_code
 JOIN LATERAL (
-  SELECT student_id FROM student WHERE status = 'active'
+  SELECT student_id FROM tb_student WHERE status = 'active'
   ORDER BY (student_id * 13 + v.position) % 97, student_id LIMIT 1
 ) a ON true
-LEFT JOIN app_user u ON u.login = 'registrar'
+LEFT JOIN tb_app_user u ON u.login = 'registrar'
 ON CONFLICT (student_id, course_id) DO NOTHING;
 
 -- ============================================================================
 -- 16. AUDITORIA  [C11] [E4]
---     log_action é DML ('insert'/'update'/'delete'): o QUE aconteceu com a
---     LINHA. O evento de negócio ("matrícula criada", "status alterado") vai
---     no jsonb — que é justamente o que o índice GIN do 06_indices.sql explora.
---     app_user_id tem DEFAULT f_session_user(); aqui é passado explicitamente
---     porque a carga fala em name do administrador.
+--     [E19] A carga NÃO insere no street: os triggers de auditoria já gravaram
+--     uma linha por INSERT em pessoa, aluno, matricula, nota e
+--     historico enquanto os blocos acima rodavam. Inserir à mão aqui
+--     duplicaria a trilha — e a diferença entre "a aplicação lembrou de logar"
+--     e "o banco logou" é justamente o ponto da mudança.
 -- ============================================================================
-INSERT INTO enrollment_log (enrollment_id, app_user_id, occurred_at, action, detail)
-SELECT m.enrollment_id, u.app_user_id, m.enrolled_at, 'insert',
-       jsonb_build_object('evento', 'matricula_criada', 'section', tu.code,
-                          'origem', 'carga_inicial', 'status_inicial', 'confirmed')
-FROM enrollment m
-JOIN section tu ON tu.section_id = m.section_id
-LEFT JOIN app_user u ON u.login = 'bd2';
-
-INSERT INTO enrollment_log (enrollment_id, app_user_id, occurred_at, action, detail)
-SELECT m.enrollment_id, u.app_user_id, m.enrolled_at + interval '5 days', 'update',
-       jsonb_build_object('evento', 'status_alterado', 'section', tu.code,
-                          'origem', 'carga_inicial',
-                          'de', 'confirmed', 'para', m.status::text)
-FROM enrollment m
-JOIN section tu ON tu.section_id = m.section_id
-LEFT JOIN app_user u ON u.login = 'bd2'
-WHERE m.status IN ('suspended', 'cancelled');
 
 COMMIT;
 
@@ -1012,19 +1006,19 @@ DECLARE
   n_alunos int; n_turmas int; n_matriculas int; n_vagas_tabd int;
   n_notas int; n_presencas int; n_aulas int; n_comp1 int; n_ead int;
 BEGIN
-  SELECT count(*) INTO n_alunos     FROM student;
-  SELECT count(*) INTO n_turmas     FROM section;
-  SELECT count(*) INTO n_matriculas FROM enrollment;
-  SELECT count(*) INTO n_notas      FROM grade;
-  SELECT count(*) INTO n_presencas  FROM attendance;
-  SELECT count(*) INTO n_aulas      FROM class_meeting;
+  SELECT count(*) INTO n_alunos     FROM tb_student;
+  SELECT count(*) INTO n_turmas     FROM tb_section;
+  SELECT count(*) INTO n_matriculas FROM tb_enrollment;
+  SELECT count(*) INTO n_notas      FROM tb_grade;
+  SELECT count(*) INTO n_presencas  FROM tb_attendance;
+  SELECT count(*) INTO n_aulas      FROM tb_class_meeting;
   SELECT t.seats - count(m.enrollment_id) FILTER (WHERE m.status = 'confirmed')
     INTO n_vagas_tabd
-  FROM section t LEFT JOIN enrollment m ON m.section_id = t.section_id
+  FROM tb_section t LEFT JOIN tb_enrollment m ON m.section_id = t.section_id
   WHERE t.code = 'TABD-N1' GROUP BY t.seats;
-  SELECT count(*) INTO n_comp1 FROM enrollment m JOIN section t ON t.section_id = m.section_id
+  SELECT count(*) INTO n_comp1 FROM tb_enrollment m JOIN tb_section t ON t.section_id = m.section_id
    WHERE t.code = 'COMP1-N1';
-  SELECT count(*) INTO n_ead FROM section_schedule th JOIN section t ON t.section_id = th.section_id
+  SELECT count(*) INTO n_ead FROM tb_section_schedule th JOIN tb_section t ON t.section_id = th.section_id
    WHERE t.code = 'LBD2-N1' AND th.room_id IS NULL;
 
   IF n_alunos     < 100 THEN RAISE EXCEPTION 'Carga insuficiente: % alunos (mínimo 100)', n_alunos; END IF;
@@ -1034,7 +1028,7 @@ BEGIN
   IF n_comp1 <> 0       THEN RAISE EXCEPTION 'Cenário da junção externa quebrado: COMP1-N1 tem % matrículas (esperado 0)', n_comp1; END IF;
   IF n_ead   <  1       THEN RAISE EXCEPTION 'Cenário EAD quebrado: LBD2-N1 sem horário de sala NULL'; END IF;
   IF n_notas      < 500 THEN RAISE EXCEPTION 'Poucas notas: %', n_notas; END IF;
-  IF NOT EXISTS (SELECT 1 FROM academic_record WHERE outcome = 'failed_attendance')
+  IF NOT EXISTS (SELECT 1 FROM tb_academic_record WHERE outcome = 'failed_attendance')
     THEN RAISE EXCEPTION 'Cenário de frequência quebrado: ninguém reprovou por falta'; END IF;
   IF n_presencas  < 5000 THEN RAISE EXCEPTION 'Poucas presenças: %', n_presencas; END IF;
 
@@ -1044,45 +1038,45 @@ BEGIN
 END $$;
 
 \echo '=== Resumo da carga (41 tabelas) ==='
-SELECT 'country' AS tabela, count(*) FROM country                          UNION ALL
-SELECT 'state',            count(*) FROM state                     UNION ALL
-SELECT 'city',            count(*) FROM city                     UNION ALL
-SELECT 'address',          count(*) FROM address                   UNION ALL
-SELECT 'person',            count(*) FROM person                     UNION ALL
-SELECT 'phone',          count(*) FROM phone                   UNION ALL
-SELECT 'person_document',  count(*) FROM person_document           UNION ALL
-SELECT 'app_user',           count(*) FROM app_user                    UNION ALL
-SELECT 'campus',            count(*) FROM campus                     UNION ALL
-SELECT 'department',      count(*) FROM department               UNION ALL
-SELECT 'building',            count(*) FROM building                     UNION ALL
-SELECT 'room',              count(*) FROM room                       UNION ALL
-SELECT 'resource',           count(*) FROM resource                    UNION ALL
-SELECT 'room_resource',      count(*) FROM room_resource               UNION ALL
-SELECT 'professor',         count(*) FROM professor                  UNION ALL
-SELECT 'professor_degree',count(*) FROM professor_degree         UNION ALL
-SELECT 'program',             count(*) FROM program                      UNION ALL
-SELECT 'program_coordination', count(*) FROM program_coordination          UNION ALL
-SELECT 'curriculum',         count(*) FROM curriculum                  UNION ALL
-SELECT 'course',        count(*) FROM course                 UNION ALL
-SELECT 'curriculum_course', count(*) FROM curriculum_course    UNION ALL
-SELECT 'prerequisite',     count(*) FROM prerequisite              UNION ALL
-SELECT 'student',             count(*) FROM student                      UNION ALL
-SELECT 'credit_transfer', count(*) FROM credit_transfer UNION ALL
-SELECT 'academic_term',    count(*) FROM academic_term             UNION ALL
-SELECT 'enrollment_window', count(*) FROM enrollment_window          UNION ALL
-SELECT 'holiday',           count(*) FROM holiday                    UNION ALL
-SELECT 'section',             count(*) FROM section                      UNION ALL
-SELECT 'section_professor',   count(*) FROM section_professor            UNION ALL
-SELECT 'section_schedule',     count(*) FROM section_schedule              UNION ALL
-SELECT 'syllabus',      count(*) FROM syllabus               UNION ALL
-SELECT 'syllabus_unit', count(*) FROM syllabus_unit    UNION ALL
-SELECT 'bibliography',      count(*) FROM bibliography               UNION ALL
-SELECT 'syllabus_bibliography', count(*) FROM syllabus_bibliography UNION ALL
-SELECT 'enrollment',         count(*) FROM enrollment                  UNION ALL
-SELECT 'academic_record',         count(*) FROM academic_record                  UNION ALL
-SELECT 'enrollment_log',     count(*) FROM enrollment_log              UNION ALL
-SELECT 'class_meeting',              count(*) FROM class_meeting                       UNION ALL
-SELECT 'attendance',          count(*) FROM attendance                   UNION ALL
-SELECT 'assessment',         count(*) FROM assessment                  UNION ALL
-SELECT 'grade',              count(*) FROM grade
+SELECT 'tb_country' AS tabela, count(*) FROM tb_country                          UNION ALL
+SELECT 'tb_state',            count(*) FROM tb_state                     UNION ALL
+SELECT 'tb_city',            count(*) FROM tb_city                     UNION ALL
+SELECT 'tb_address',          count(*) FROM tb_address                   UNION ALL
+SELECT 'tb_person',            count(*) FROM tb_person                     UNION ALL
+SELECT 'tb_phone',          count(*) FROM tb_phone                   UNION ALL
+SELECT 'tb_person_document',  count(*) FROM tb_person_document           UNION ALL
+SELECT 'tb_app_user',           count(*) FROM tb_app_user                    UNION ALL
+SELECT 'tb_campus',            count(*) FROM tb_campus                     UNION ALL
+SELECT 'tb_department',      count(*) FROM tb_department               UNION ALL
+SELECT 'tb_building',            count(*) FROM tb_building                     UNION ALL
+SELECT 'tb_room',              count(*) FROM tb_room                       UNION ALL
+SELECT 'tb_resource',           count(*) FROM tb_resource                    UNION ALL
+SELECT 'tb_room_resource',      count(*) FROM tb_room_resource               UNION ALL
+SELECT 'tb_professor',         count(*) FROM tb_professor                  UNION ALL
+SELECT 'tb_professor_degree',count(*) FROM tb_professor_degree         UNION ALL
+SELECT 'tb_program',             count(*) FROM tb_program                      UNION ALL
+SELECT 'tb_program_coordination', count(*) FROM tb_program_coordination          UNION ALL
+SELECT 'tb_curriculum',         count(*) FROM tb_curriculum                  UNION ALL
+SELECT 'tb_course',        count(*) FROM tb_course                 UNION ALL
+SELECT 'tb_curriculum_course', count(*) FROM tb_curriculum_course    UNION ALL
+SELECT 'tb_prerequisite',     count(*) FROM tb_prerequisite              UNION ALL
+SELECT 'tb_student',             count(*) FROM tb_student                      UNION ALL
+SELECT 'tb_credit_transfer', count(*) FROM tb_credit_transfer UNION ALL
+SELECT 'tb_academic_term',    count(*) FROM tb_academic_term             UNION ALL
+SELECT 'tb_enrollment_window', count(*) FROM tb_enrollment_window          UNION ALL
+SELECT 'tb_holiday',           count(*) FROM tb_holiday                    UNION ALL
+SELECT 'tb_section',             count(*) FROM tb_section                      UNION ALL
+SELECT 'tb_section_professor',   count(*) FROM tb_section_professor            UNION ALL
+SELECT 'tb_section_schedule',     count(*) FROM tb_section_schedule              UNION ALL
+SELECT 'tb_syllabus',      count(*) FROM tb_syllabus               UNION ALL
+SELECT 'tb_syllabus_unit', count(*) FROM tb_syllabus_unit    UNION ALL
+SELECT 'tb_bibliography',      count(*) FROM tb_bibliography               UNION ALL
+SELECT 'tb_syllabus_bibliography', count(*) FROM tb_syllabus_bibliography UNION ALL
+SELECT 'tb_enrollment',         count(*) FROM tb_enrollment                  UNION ALL
+SELECT 'tb_academic_record',         count(*) FROM tb_academic_record                  UNION ALL
+SELECT 'log_matricula',     count(*) FROM tb_audit_log              UNION ALL
+SELECT 'tb_class_meeting',              count(*) FROM tb_class_meeting                       UNION ALL
+SELECT 'tb_attendance',          count(*) FROM tb_attendance                   UNION ALL
+SELECT 'tb_assessment',         count(*) FROM tb_assessment                  UNION ALL
+SELECT 'tb_grade',              count(*) FROM tb_grade
 ORDER BY tabela;
