@@ -15,42 +15,42 @@ SET search_path TO academico, public;
 
 BEGIN;
 
-DROP VIEW IF EXISTS v_oferta_periodo, v_vagas_disponiveis, v_historico_aluno CASCADE;
-DROP MATERIALIZED VIEW IF EXISTS mv_indicadores;
-DROP MATERIALIZED VIEW IF EXISTS mv_historico_consolidado;
+DROP VIEW IF EXISTS vw_oferta_periodo, vw_vagas_disponiveis, vw_historico_aluno CASCADE;
+DROP MATERIALIZED VIEW IF EXISTS vwm_indicadores;
+DROP MATERIALIZED VIEW IF EXISTS vwm_historico_consolidado;
 
 -- ----------------------------------------------------------------------------
--- VIEW 1 — v_oferta_periodo: o catálogo público do período corrente.
+-- VIEW 1 — oferta_periodo: o catálogo público do período corrente.
 -- "Corrente" é dinâmico (CURRENT_DATE dentro do período), não hardcoded.
 -- Horários agregados numa string legível via LATERAL (turma sem horário
 -- publicado ainda aparece — LEFT JOIN).
 -- ----------------------------------------------------------------------------
-CREATE VIEW v_oferta_periodo AS
+CREATE VIEW vw_oferta_periodo AS
 SELECT pl.ano_periodo_letivo || '/' || pl.semestre_periodo_letivo        AS periodo,
        t.id_turma                                AS id_turma,
-       t.codigo_turma                            AS turma,
-       d.codigo_disciplina                            AS disciplina,
+       t.codigo_turma                            AS tb_turma,
+       d.codigo_disciplina                            AS tb_disciplina,
        d.nome_disciplina                              AS nome_disciplina,
        d.ch_total_disciplina,
-       docentes.titular                          AS professor,
+       docentes.titular                          AS tb_professor,
        docentes.equipe                           AS equipe_docente,
        t.turno_turma,
        t.modalidade_turma,
        t.vagas_turma,
        h.encontros
-FROM turma t
-JOIN periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
+FROM tb_turma t
+JOIN tb_periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
                       AND CURRENT_DATE BETWEEN pl.data_inicio_periodo_letivo AND pl.data_fim_periodo_letivo
-JOIN disciplina d      ON d.id_disciplina = t.id_disciplina
+JOIN tb_disciplina d      ON d.id_disciplina = t.id_disciplina
 -- [E11] o professor virou uma EQUIPE: o titular é quem aparece no catálogo, e
 -- a equipe completa vai junto numa string (co-docência é a regra em laboratório).
 LEFT JOIN LATERAL (
   SELECT max(pe.nome_pessoa) FILTER (WHERE tp.papel_turma_professor = 'titular') AS titular,
          string_agg(pe.nome_pessoa || ' (' || tp.papel_turma_professor || ')', ' · '
                     ORDER BY tp.papel_turma_professor, pe.nome_pessoa)           AS equipe
-  FROM turma_professor tp
-  JOIN professor p ON p.id_professor = tp.id_professor
-  JOIN pessoa pe   ON pe.id_pessoa = p.id_pessoa                    -- [E2]
+  FROM tb_turma_professor tp
+  JOIN tb_professor p ON p.id_professor = tp.id_professor
+  JOIN tb_pessoa pe   ON pe.id_pessoa = p.id_pessoa                    -- [E2]
   WHERE tp.id_turma = t.id_turma
 ) docentes ON true
 LEFT JOIN LATERAL (
@@ -61,49 +61,49 @@ LEFT JOIN LATERAL (
            -- [E12] sala NULL = turma EAD: o catálogo diz isso em vez de sumir com a linha
            || ' (' || coalesce(s.codigo_sala || '/' || pr.nome_predio, 'EAD') || ')',
            ' · ' ORDER BY th.dia_semana_turma_horario, lower(th.faixa_turma_horario)) AS encontros
-  FROM turma_horario th
-  LEFT JOIN sala s   ON s.id_sala = th.id_sala
-  LEFT JOIN predio pr ON pr.id_predio = s.id_predio                 -- [E5]
+  FROM tb_turma_horario th
+  LEFT JOIN tb_sala s   ON s.id_sala = th.id_sala
+  LEFT JOIN tb_predio pr ON pr.id_predio = s.id_predio                 -- [E5]
   WHERE th.id_turma = t.id_turma
 ) h ON true;
-COMMENT ON VIEW v_oferta_periodo IS 'Catálogo de oferta do período letivo corrente, com horários agregados.';
+COMMENT ON VIEW vw_oferta_periodo IS 'Catálogo de oferta do período letivo corrente, com horários agregados.';
 
 -- ----------------------------------------------------------------------------
--- VIEW 2 — v_vagas_disponiveis: vagas − confirmadas por turma.
+-- VIEW 2 — vagas_disponiveis: vagas − confirmadas por turma.
 -- É a fonte de leitura da transação de matrícula (Marco 2 · concorrência):
 -- centraliza a REGRA de contagem (só 'confirmada' consome vaga) num único
 -- lugar, em vez de espalhá-la por consultas ad hoc.
 -- ----------------------------------------------------------------------------
-CREATE VIEW v_vagas_disponiveis AS
+CREATE VIEW vw_vagas_disponiveis AS
 SELECT t.id_turma                                                  AS id_turma,
-       t.codigo_turma                                              AS turma,
+       t.codigo_turma                                              AS tb_turma,
        pl.ano_periodo_letivo, pl.semestre_periodo_letivo,
        t.vagas_turma,
        count(m.id_matricula) FILTER (WHERE m.status_matricula = 'confirmada')    AS confirmadas,
        t.vagas_turma - count(m.id_matricula) FILTER (WHERE m.status_matricula = 'confirmada') AS vagas_livres
-FROM turma t
-JOIN periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
-LEFT JOIN matricula m  ON m.id_turma = t.id_turma
+FROM tb_turma t
+JOIN tb_periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
+LEFT JOIN tb_matricula m  ON m.id_turma = t.id_turma
 GROUP BY t.id_turma, pl.ano_periodo_letivo, pl.semestre_periodo_letivo;
-COMMENT ON VIEW v_vagas_disponiveis IS 'Vagas livres por turma (regra: só status=confirmada consome vaga).';
+COMMENT ON VIEW vw_vagas_disponiveis IS 'Vagas livres por turma (regra: só status=confirmada consome vaga).';
 
 -- ----------------------------------------------------------------------------
--- VIEW 3 — v_historico_aluno: histórico completo, pronto para o aluno consultar.
+-- VIEW 3 — historico_aluno: histórico completo, pronto para o aluno consultar.
 -- security_invoker = on (PG 15+): a view executa com as PERMISSÕES DE QUEM
 -- CONSULTA, então as políticas de RLS do 08_seguranca.sql valem ATRAVÉS da
 -- view. Sem isso, a view rodaria como o dono (superusuário bd2) e vazaria
 -- o histórico de todos — exatamente o que o RLS deve impedir.
 -- ----------------------------------------------------------------------------
-CREATE VIEW v_historico_aluno WITH (security_invoker = on) AS
+CREATE VIEW vw_historico_aluno WITH (security_invoker = on) AS
 SELECT a.id_aluno                          AS id_aluno,
        a.matricula_aluno                   AS ra,
-       pe.nome_pessoa                      AS aluno,                    -- [E2]
+       pe.nome_pessoa                      AS tb_aluno,                    -- [E2]
        pl.ano_periodo_letivo || '/' || pl.semestre_periodo_letivo  AS periodo,
-       d.codigo_disciplina                      AS disciplina,
+       d.codigo_disciplina                      AS tb_disciplina,
        d.nome_disciplina                        AS nome_disciplina,
        d.ch_total_disciplina,
        -- [E14] notas individuais em vez de três colunas fixas: a lista sai de
-       -- `nota`, e média/frequência de v_desempenho_matricula (mesma regra da P3).
+       -- `tb_nota`, e média/frequência de desempenho_matricula (mesma regra da P3).
        notas.detalhe                            AS notas,
        dm.frequencia,
        dm.media_final,
@@ -111,41 +111,41 @@ SELECT a.id_aluno                          AS id_aluno,
        h.situacao_historico,
        h.data_fechamento_historico,
        m.status_matricula                      AS status_matricula
-FROM aluno a
-JOIN pessoa pe         ON pe.id_pessoa = a.id_pessoa
-JOIN matricula m       ON m.id_aluno = a.id_aluno
-JOIN turma t           ON t.id_turma = m.id_turma
-JOIN periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
-JOIN disciplina d      ON d.id_disciplina = t.id_disciplina
-LEFT JOIN historico h  ON h.id_matricula = m.id_matricula
-LEFT JOIN v_desempenho_matricula dm ON dm.id_matricula = m.id_matricula
+FROM tb_aluno a
+JOIN tb_pessoa pe         ON pe.id_pessoa = a.id_pessoa
+JOIN tb_matricula m       ON m.id_aluno = a.id_aluno
+JOIN tb_turma t           ON t.id_turma = m.id_turma
+JOIN tb_periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
+JOIN tb_disciplina d      ON d.id_disciplina = t.id_disciplina
+LEFT JOIN tb_historico h  ON h.id_matricula = m.id_matricula
+LEFT JOIN vw_desempenho_matricula dm ON dm.id_matricula = m.id_matricula
 LEFT JOIN LATERAL (
   SELECT string_agg(av.nome_avaliacao || ' ' || n.valor_nota, ' · '
                     ORDER BY av.substitutiva_avaliacao, av.nome_avaliacao) AS detalhe
-  FROM nota n JOIN avaliacao av ON av.id_avaliacao = n.id_avaliacao
+  FROM tb_nota n JOIN tb_avaliacao av ON av.id_avaliacao = n.id_avaliacao
   WHERE n.id_matricula = m.id_matricula
 ) notas ON true
 ORDER BY a.id_aluno, pl.ano_periodo_letivo, pl.semestre_periodo_letivo, d.codigo_disciplina;
-COMMENT ON VIEW v_historico_aluno IS 'Histórico por aluno; security_invoker=on para o RLS valer através da view.';
+COMMENT ON VIEW vw_historico_aluno IS 'Histórico por aluno; security_invoker=on para o RLS valer através da view.';
 
 -- ----------------------------------------------------------------------------
--- MATERIALIZED VIEW — mv_indicadores: painel disciplina × período.
+-- MATERIALIZED VIEW — indicadores: painel disciplina × período.
 --
 -- POLÍTICA DE ATUALIZAÇÃO (justificativa exigida no enunciado):
 --   Os indicadores agregam NOTAS e SITUAÇÕES, que só mudam em dois momentos
 --   do semestre — lançamento de notas e fechamento do período. Não faz
 --   sentido pagar o custo da agregação a cada consulta da coordenação
 --   (view comum), nem manter refresh contínuo. Política adotada:
---     REFRESH MATERIALIZED VIEW CONCURRENTLY mv_indicadores;
+--     REFRESH MATERIALIZED VIEW CONCURRENTLY indicadores;
 --   executado (a) após o fechamento de cada período letivo e (b) sob demanda
 --   após cargas em lote — o 05_volume_legado.sql faz exatamente isso.
 --   O CONCURRENTLY não bloqueia leituras durante o refresh e exige o índice
---   ÚNICO criado abaixo (ux_mv_indicadores) — por isso ele existe.
+--   ÚNICO criado abaixo (ux_vwm_indicadores) — por isso ele existe.
 -- ----------------------------------------------------------------------------
-CREATE MATERIALIZED VIEW mv_indicadores AS
+CREATE MATERIALIZED VIEW vwm_indicadores AS
 SELECT d.id_disciplina                                                   AS id_disciplina,
        pl.id_periodo_letivo                                                  AS id_periodo_letivo,
-       d.codigo_disciplina                                               AS disciplina,
+       d.codigo_disciplina                                               AS tb_disciplina,
        pl.ano_periodo_letivo, pl.semestre_periodo_letivo,
        count(DISTINCT t.id_turma)                                   AS turmas,
        sum(t.vagas_turma)                                           AS vagas_ofertadas,
@@ -161,35 +161,35 @@ SELECT d.id_disciplina                                                   AS id_d
              / NULLIF(count(h.id_historico) FILTER (WHERE h.situacao_historico IN
                ('aprovado', 'reprovado_nota', 'reprovado_frequencia')), 0), 1)
                                                               AS aprovacao_pct
-FROM turma t
-JOIN periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
-JOIN disciplina d      ON d.id_disciplina = t.id_disciplina
-LEFT JOIN matricula m  ON m.id_turma = t.id_turma
-LEFT JOIN historico h  ON h.id_matricula = m.id_matricula
-LEFT JOIN v_desempenho_matricula dm ON dm.id_matricula = m.id_matricula     -- [E14]
+FROM tb_turma t
+JOIN tb_periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
+JOIN tb_disciplina d      ON d.id_disciplina = t.id_disciplina
+LEFT JOIN tb_matricula m  ON m.id_turma = t.id_turma
+LEFT JOIN tb_historico h  ON h.id_matricula = m.id_matricula
+LEFT JOIN vw_desempenho_matricula dm ON dm.id_matricula = m.id_matricula     -- [E14]
 GROUP BY d.id_disciplina, pl.id_periodo_letivo;
 
 -- Exigido pelo REFRESH ... CONCURRENTLY (identifica cada linha unicamente)
-CREATE UNIQUE INDEX ux_mv_indicadores ON mv_indicadores (id_disciplina, id_periodo_letivo);
-COMMENT ON MATERIALIZED VIEW mv_indicadores IS
+CREATE UNIQUE INDEX ux_vwm_indicadores ON vwm_indicadores (id_disciplina, id_periodo_letivo);
+COMMENT ON MATERIALIZED VIEW vwm_indicadores IS
   'Indicadores disciplina×período; refresh CONCURRENTLY pós-fechamento (política justificada no script).';
 
 -- ----------------------------------------------------------------------------
--- MATERIALIZED VIEW 2 — mv_historico_consolidado: o objeto que a ampliação
+-- MATERIALIZED VIEW 2 — historico_consolidado: o objeto que a ampliação
 -- PROMETEU em [E14] e que paga a conta que ela criou.
 --
--- Antes, `historico` guardava nota_a1/a2/p3, frequência e uma coluna GERADA
+-- Antes, `tb_historico` guardava nota_a1/a2/p3, frequência e uma coluna GERADA
 -- com a média — leitura de uma linha só. Depois de [E14], a mesma informação
--- exige agregar `nota` (n linhas) e `presenca` (dezenas por matrícula). O
+-- exige agregar `tb_nota` (n linhas) e `tb_presenca` (dezenas por matrícula). O
 -- ganho é modelagem correta (1FN, avaliações flexíveis); o custo é agregação
 -- a cada leitura. Esta MV é onde esse custo é pago UMA vez por fechamento —
 -- e é ela que sustenta o índice B-tree de faixa de média do 06_indices.sql,
 -- que antes vivia na coluna gerada.
 --
--- Mesma política de refresh da mv_indicadores: pós-fechamento de período e
+-- Mesma política de refresh da indicadores: pós-fechamento de período e
 -- pós-carga em lote. O índice único abaixo é o que habilita CONCURRENTLY.
 -- ----------------------------------------------------------------------------
-CREATE MATERIALIZED VIEW mv_historico_consolidado AS
+CREATE MATERIALIZED VIEW vwm_historico_consolidado AS
 SELECT dm.id_matricula,
        dm.id_aluno,
        dm.id_turma,
@@ -201,20 +201,20 @@ SELECT dm.id_matricula,
        dm.usou_substitutiva,
        h.situacao_historico,
        h.data_fechamento_historico
-FROM v_desempenho_matricula dm
-JOIN turma t          ON t.id_turma = dm.id_turma
-LEFT JOIN historico h ON h.id_matricula = dm.id_matricula;
+FROM vw_desempenho_matricula dm
+JOIN tb_turma t          ON t.id_turma = dm.id_turma
+LEFT JOIN tb_historico h ON h.id_matricula = dm.id_matricula;
 
-CREATE UNIQUE INDEX ux_mv_historico_consolidado ON mv_historico_consolidado (id_matricula);
-COMMENT ON MATERIALIZED VIEW mv_historico_consolidado IS
+CREATE UNIQUE INDEX ux_vwm_historico_consolidado ON vwm_historico_consolidado (id_matricula);
+COMMENT ON MATERIALIZED VIEW vwm_historico_consolidado IS
   'Consolidado de média/frequência por matrícula [E14]; sucessor materializado da coluna gerada [C13].';
 
 COMMIT;
 
 \echo '=== Views criadas ==='
-SELECT 'v_desempenho_matricula (01_ddl)' AS objeto, count(*) AS linhas FROM v_desempenho_matricula UNION ALL
-SELECT 'v_oferta_periodo',               count(*)           FROM v_oferta_periodo    UNION ALL
-SELECT 'v_vagas_disponiveis',            count(*)           FROM v_vagas_disponiveis UNION ALL
-SELECT 'v_historico_aluno',              count(*)           FROM v_historico_aluno   UNION ALL
-SELECT 'mv_indicadores',                 count(*)           FROM mv_indicadores      UNION ALL
-SELECT 'mv_historico_consolidado',       count(*)           FROM mv_historico_consolidado;
+SELECT 'v_desempenho_matricula (01_ddl)' AS objeto, count(*) AS linhas FROM vw_desempenho_matricula UNION ALL
+SELECT 'v_oferta_periodo',               count(*)           FROM vw_oferta_periodo    UNION ALL
+SELECT 'v_vagas_disponiveis',            count(*)           FROM vw_vagas_disponiveis UNION ALL
+SELECT 'v_historico_aluno',              count(*)           FROM vw_historico_aluno   UNION ALL
+SELECT 'mv_indicadores',                 count(*)           FROM vwm_indicadores      UNION ALL
+SELECT 'mv_historico_consolidado',       count(*)           FROM vwm_historico_consolidado;

@@ -49,10 +49,10 @@ DECLARE
   v_confirmadas int;
   v_matricula_id int;
 BEGIN
-  SELECT vagas_turma INTO v_vagas FROM turma WHERE id_turma = p_turma;
+  SELECT vagas_turma INTO v_vagas FROM tb_turma WHERE id_turma = p_turma;
 
   SELECT count(*) INTO v_confirmadas                -- LEITURA...
-  FROM matricula WHERE id_turma = p_turma AND status_matricula = 'confirmada';
+  FROM tb_matricula WHERE id_turma = p_turma AND status_matricula = 'confirmada';
 
   IF v_confirmadas >= v_vagas THEN
     -- sem linha de log: recusa não altera linha nenhuma e acao_log_t é DML
@@ -61,14 +61,14 @@ BEGIN
 
   PERFORM pg_sleep(p_pausa);                        -- ...JANELA DA CORRIDA...
 
-  INSERT INTO matricula (id_aluno, id_turma)        -- ...GRAVAÇÃO
+  INSERT INTO tb_matricula (id_aluno, id_turma)        -- ...GRAVAÇÃO
   VALUES (p_aluno, p_turma)
   RETURNING id_matricula INTO v_matricula_id;
 
-  INSERT INTO historico (id_matricula) VALUES (v_matricula_id);
+  INSERT INTO tb_historico (id_matricula) VALUES (v_matricula_id);
   -- [C11] o QUE aconteceu com a linha vai no ENUM; o evento de negócio, no jsonb.
   -- id_usuario fica no DEFAULT f_usuario_sessao(): quem matriculou é a ROLE [E4].
-  INSERT INTO log_matricula (id_matricula, acao_log_matricula, detalhe_log_matricula)
+  INSERT INTO tb_log_auditoria (id_matricula, acao_log_matricula, detalhe_log_matricula)
   VALUES (v_matricula_id, 'insert',
           jsonb_build_object('evento', 'matricula_criada', 'via', 'fn_matricular_sem_protecao'));
 
@@ -92,11 +92,11 @@ DECLARE
   v_matricula_id int;
 BEGIN
   SELECT vagas_turma INTO v_vagas
-  FROM turma WHERE id_turma = p_turma
+  FROM tb_turma WHERE id_turma = p_turma
   FOR UPDATE;                                       -- <<< o trecho crítico começa AQUI
 
   SELECT count(*) INTO v_confirmadas
-  FROM matricula WHERE id_turma = p_turma AND status_matricula = 'confirmada';
+  FROM tb_matricula WHERE id_turma = p_turma AND status_matricula = 'confirmada';
 
   IF v_confirmadas >= v_vagas THEN
     -- sem linha de log: recusa não altera linha nenhuma e acao_log_t é DML
@@ -105,14 +105,14 @@ BEGIN
 
   PERFORM pg_sleep(p_pausa);
 
-  INSERT INTO matricula (id_aluno, id_turma)
+  INSERT INTO tb_matricula (id_aluno, id_turma)
   VALUES (p_aluno, p_turma)
   RETURNING id_matricula INTO v_matricula_id;
 
-  INSERT INTO historico (id_matricula) VALUES (v_matricula_id);
+  INSERT INTO tb_historico (id_matricula) VALUES (v_matricula_id);
   -- [C11] o QUE aconteceu com a linha vai no ENUM; o evento de negócio, no jsonb.
   -- id_usuario fica no DEFAULT f_usuario_sessao(): quem matriculou é a ROLE [E4].
-  INSERT INTO log_matricula (id_matricula, acao_log_matricula, detalhe_log_matricula)
+  INSERT INTO tb_log_auditoria (id_matricula, acao_log_matricula, detalhe_log_matricula)
   VALUES (v_matricula_id, 'insert',
           jsonb_build_object('evento', 'matricula_criada', 'via', 'fn_matricular_com_lock'));
 
@@ -139,13 +139,13 @@ BEGIN
   -- [E13] nota e presenca apontam para matricula por FK COMPOSTA e SEM cascata
   -- (de propósito: nota não some por acidente). Numa matrícula de demo elas não
   -- existem, mas o DELETE explícito mantém a função correta se um dia existirem.
-  DELETE FROM nota n USING matricula m
+  DELETE FROM tb_nota n USING tb_matricula m
    WHERE m.id_matricula = n.id_matricula
      AND m.id_turma = p_turma AND m.data_matricula >= date_trunc('day', now());
-  DELETE FROM presenca pr USING matricula m
+  DELETE FROM tb_presenca pr USING tb_matricula m
    WHERE m.id_matricula = pr.id_matricula
      AND m.id_turma = p_turma AND m.data_matricula >= date_trunc('day', now());
-  DELETE FROM matricula
+  DELETE FROM tb_matricula
   WHERE id_turma = p_turma AND data_matricula >= date_trunc('day', now());
   GET DIAGNOSTICS v_removidas = ROW_COUNT;
   RETURN format('Reset: %s matrícula(s) de demonstração removida(s) da turma %s.',

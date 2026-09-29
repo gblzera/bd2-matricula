@@ -12,16 +12,16 @@
 --
 -- A identidade do aluno vem do NOME DA ROLE: 'al_' || matricula. A função
 -- aluno_id_de(current_user) (SECURITY DEFINER) resolve a role para aluno.id_aluno —
--- as políticas usam essa função, sem recursão de RLS. A tabela `usuario` [E4]
+-- as políticas usam essa função, sem recursão de RLS. A tabela `tb_usuario` [E4]
 -- guarda esse mesmo login do lado dos DADOS, e f_usuario_sessao() faz a volta.
 --
 -- O BURACO QUE A AMPLIAÇÃO ABRIU (e que este script fecha):
---   Antes, proteger `aluno`, `matricula` e `historico` bastava — nome, CPF e
+--   Antes, proteger `tb_aluno`, `tb_matricula` e `tb_historico` bastava — nome, CPF e
 --   notas moravam nessas três tabelas. Depois de [E2] o nome e o CPF foram
---   para `pessoa`, e depois de [E14] as notas foram para `nota`. As MESMAS
+--   para `tb_pessoa`, e depois de [E14] as notas foram para `tb_nota`. As MESMAS
 --   três políticas de antes passariam a deixar o dado pessoal e as notas de
 --   TODO MUNDO em aberto. Normalizar mudou a superfície de ataque: por isso
---   `pessoa`, `nota` e `presenca` também ganham RLS aqui.
+--   `tb_pessoa`, `tb_nota` e `tb_presenca` também ganham RLS aqui.
 --   Regra de bolso que fica: RLS acompanha o DADO, não a tabela onde ele
 --   estava quando a política foi escrita.
 --
@@ -54,7 +54,7 @@ DECLARE r record;
 BEGIN
   FOR r IN
     SELECT a.matricula_aluno
-    FROM aluno a JOIN matricula m ON m.id_aluno = a.id_aluno AND m.status_matricula = 'confirmada'
+    FROM tb_aluno a JOIN tb_matricula m ON m.id_aluno = a.id_aluno AND m.status_matricula = 'confirmada'
     GROUP BY a.id_aluno ORDER BY count(*) DESC, a.id_aluno LIMIT 2
   LOOP
     BEGIN
@@ -81,16 +81,16 @@ END $$;
 CREATE OR REPLACE FUNCTION aluno_id_de(p_role text)
 RETURNS integer
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = academico
-AS $$ SELECT id_aluno FROM aluno WHERE matricula_aluno = substr(p_role, 4) $$;
+AS $$ SELECT id_aluno FROM tb_aluno WHERE matricula_aluno = substr(p_role, 4) $$;
 
 -- Mesma técnica, um salto adiante: a PESSOA por trás da role. Existe como
--- função própria (em vez de subconsulta dentro da política de `pessoa`) para
--- que a política não precise ler `aluno` — que também tem RLS. Sem isso,
+-- função própria (em vez de subconsulta dentro da política de `tb_pessoa`) para
+-- que a política não precise ler `tb_aluno` — que também tem RLS. Sem isso,
 -- a política de uma tabela dependeria da política de outra.
 CREATE OR REPLACE FUNCTION pessoa_id_de(p_role text)
 RETURNS integer
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = academico
-AS $$ SELECT id_pessoa FROM aluno WHERE matricula_aluno = substr(p_role, 4) $$;
+AS $$ SELECT id_pessoa FROM tb_aluno WHERE matricula_aluno = substr(p_role, 4) $$;
 
 -- ----------------------------------------------------------------------------
 -- 3. GRANT / REVOKE (privilégio mínimo por papel)
@@ -100,148 +100,148 @@ AS $$ SELECT id_pessoa FROM aluno WHERE matricula_aluno = substr(p_role, 4) $$;
 GRANT USAGE ON SCHEMA academico TO papel_aluno, secretaria, coordenacao;
 
 -- papel_aluno: catálogo público em leitura...
-GRANT SELECT ON campus, curso, curriculo, curriculo_disciplina, disciplina,
-                pre_requisito, professor, periodo_letivo, predio, sala, turma,
-                turma_professor, turma_horario, feriado, periodo_matricula,
-                avaliacao, plano_ensino, unidade_plano_ensino, bibliografia,
-                plano_ensino_bibliografia,
-                v_oferta_periodo, v_vagas_disponiveis
+GRANT SELECT ON tb_campus, tb_curso, tb_curriculo, tb_curriculo_disciplina, tb_disciplina,
+                tb_pre_requisito, tb_professor, tb_periodo_letivo, tb_predio, tb_sala, tb_turma,
+                tb_turma_professor, tb_turma_horario, tb_feriado, tb_periodo_matricula,
+                tb_avaliacao, tb_plano_ensino, tb_unidade_plano_ensino, tb_bibliografia,
+                tb_plano_ensino_bibliografia,
+                vw_oferta_periodo, vw_vagas_disponiveis
 TO papel_aluno;
 -- ...e dados pessoais: o GRANT abre a TABELA, o RLS filtra as LINHAS.
 -- pessoa/nota/presenca entram nesta lista por causa de [E2] e [E14] — é onde
 -- o dado pessoal e as notas passaram a morar.
-GRANT SELECT ON aluno, pessoa, matricula, historico, nota, presenca,
-                v_historico_aluno
+GRANT SELECT ON tb_aluno, tb_pessoa, tb_matricula, tb_historico, tb_nota, tb_presenca,
+                vw_historico_aluno
 TO papel_aluno;
--- v_desempenho_matricula roda com direitos do DONO (01_ddl.sql): conceder a
+-- desempenho_matricula roda com direitos do DONO (01_ddl.sql): conceder a
 -- VIEW não concede nota/presenca por baixo dela. É a camada que deixa o aluno
 -- ver a PRÓPRIA média sem enxergar a tabela de notas inteira.
-GRANT SELECT ON v_desempenho_matricula TO papel_aluno;
+GRANT SELECT ON vw_desempenho_matricula TO papel_aluno;
 
 -- secretaria: opera o dia a dia (sem DROP/ALTER — DDL é do DBA)
 GRANT SELECT ON ALL TABLES IN SCHEMA academico TO secretaria;
-GRANT INSERT, UPDATE ON aluno, matricula, historico, log_matricula TO secretaria;
+GRANT INSERT, UPDATE ON tb_aluno, tb_matricula, tb_historico, tb_log_auditoria TO secretaria;
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA academico TO secretaria;
 GRANT EXECUTE ON FUNCTION fn_matricular_com_lock(integer, integer, numeric) TO secretaria;
 
 -- coordenacao: leitura ampla + indicadores materializados
 GRANT SELECT ON ALL TABLES IN SCHEMA academico TO coordenacao;
-GRANT SELECT ON mv_indicadores, mv_historico_consolidado TO coordenacao;
+GRANT SELECT ON vwm_indicadores, vwm_historico_consolidado TO coordenacao;
 
 -- ----------------------------------------------------------------------------
 -- 4. Row-Level Security
 -- ENABLE = a partir daqui, para quem não é dono, vale "nega tudo" e só as
 -- políticas abrem linhas. (bd2 é dono/superusuário e ignora RLS — papel de DBA.)
 -- ----------------------------------------------------------------------------
-ALTER TABLE aluno     ENABLE ROW LEVEL SECURITY;
-ALTER TABLE matricula ENABLE ROW LEVEL SECURITY;
-ALTER TABLE historico ENABLE ROW LEVEL SECURITY;
-ALTER TABLE pessoa    ENABLE ROW LEVEL SECURITY;   -- [E2] nome e CPF moram aqui
-ALTER TABLE nota      ENABLE ROW LEVEL SECURITY;   -- [E14] as notas moram aqui
-ALTER TABLE presenca  ENABLE ROW LEVEL SECURITY;   -- [E13] a frequência, aqui
+ALTER TABLE tb_aluno     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tb_matricula ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tb_historico ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tb_pessoa    ENABLE ROW LEVEL SECURITY;   -- [E2] nome e CPF moram aqui
+ALTER TABLE tb_nota      ENABLE ROW LEVEL SECURITY;   -- [E14] as notas moram aqui
+ALTER TABLE tb_presenca  ENABLE ROW LEVEL SECURITY;   -- [E13] a frequência, aqui
 
-DROP POLICY IF EXISTS pol_aluno_so_ele_mesmo     ON aluno;
-DROP POLICY IF EXISTS pol_matricula_so_do_aluno  ON matricula;
-DROP POLICY IF EXISTS pol_historico_so_do_aluno  ON historico;
-DROP POLICY IF EXISTS pol_pessoa_so_ela_mesma    ON pessoa;
-DROP POLICY IF EXISTS pol_nota_so_do_aluno       ON nota;
-DROP POLICY IF EXISTS pol_presenca_so_do_aluno   ON presenca;
-DROP POLICY IF EXISTS pol_secretaria_aluno       ON aluno;
-DROP POLICY IF EXISTS pol_secretaria_matricula   ON matricula;
-DROP POLICY IF EXISTS pol_secretaria_historico   ON historico;
-DROP POLICY IF EXISTS pol_secretaria_pessoa      ON pessoa;
-DROP POLICY IF EXISTS pol_secretaria_nota        ON nota;
-DROP POLICY IF EXISTS pol_secretaria_presenca    ON presenca;
-DROP POLICY IF EXISTS pol_coordenacao_aluno      ON aluno;
-DROP POLICY IF EXISTS pol_coordenacao_matricula  ON matricula;
-DROP POLICY IF EXISTS pol_coordenacao_historico  ON historico;
-DROP POLICY IF EXISTS pol_coordenacao_pessoa     ON pessoa;
-DROP POLICY IF EXISTS pol_coordenacao_nota       ON nota;
-DROP POLICY IF EXISTS pol_coordenacao_presenca   ON presenca;
+DROP POLICY IF EXISTS pol_aluno_so_ele_mesmo     ON tb_aluno;
+DROP POLICY IF EXISTS pol_matricula_so_do_aluno  ON tb_matricula;
+DROP POLICY IF EXISTS pol_historico_so_do_aluno  ON tb_historico;
+DROP POLICY IF EXISTS pol_pessoa_so_ela_mesma    ON tb_pessoa;
+DROP POLICY IF EXISTS pol_nota_so_do_aluno       ON tb_nota;
+DROP POLICY IF EXISTS pol_presenca_so_do_aluno   ON tb_presenca;
+DROP POLICY IF EXISTS pol_secretaria_aluno       ON tb_aluno;
+DROP POLICY IF EXISTS pol_secretaria_matricula   ON tb_matricula;
+DROP POLICY IF EXISTS pol_secretaria_historico   ON tb_historico;
+DROP POLICY IF EXISTS pol_secretaria_pessoa      ON tb_pessoa;
+DROP POLICY IF EXISTS pol_secretaria_nota        ON tb_nota;
+DROP POLICY IF EXISTS pol_secretaria_presenca    ON tb_presenca;
+DROP POLICY IF EXISTS pol_coordenacao_aluno      ON tb_aluno;
+DROP POLICY IF EXISTS pol_coordenacao_matricula  ON tb_matricula;
+DROP POLICY IF EXISTS pol_coordenacao_historico  ON tb_historico;
+DROP POLICY IF EXISTS pol_coordenacao_pessoa     ON tb_pessoa;
+DROP POLICY IF EXISTS pol_coordenacao_nota       ON tb_nota;
+DROP POLICY IF EXISTS pol_coordenacao_presenca   ON tb_presenca;
 
 -- Aluno: enxerga apenas a si e ao que é seu.
 -- A exigência central do enunciado — "um aluno não vê o histórico de outro" —
 -- é a pol_historico_so_do_aluno: a linha do histórico só aparece se pertencer
 -- a uma matrícula do próprio aluno.
-CREATE POLICY pol_aluno_so_ele_mesmo ON aluno
+CREATE POLICY pol_aluno_so_ele_mesmo ON tb_aluno
   FOR SELECT TO papel_aluno
   USING (id_aluno = aluno_id_de(current_user::text));
 
-CREATE POLICY pol_matricula_so_do_aluno ON matricula
+CREATE POLICY pol_matricula_so_do_aluno ON tb_matricula
   FOR SELECT TO papel_aluno
   USING (id_aluno = aluno_id_de(current_user::text));
 
-CREATE POLICY pol_historico_so_do_aluno ON historico
+CREATE POLICY pol_historico_so_do_aluno ON tb_historico
   FOR SELECT TO papel_aluno
-  USING (EXISTS (SELECT 1 FROM matricula m
-                 WHERE m.id_matricula = historico.id_matricula
+  USING (EXISTS (SELECT 1 FROM tb_matricula m
+                 WHERE m.id_matricula = tb_historico.id_matricula
                    AND m.id_aluno = aluno_id_de(current_user::text)));
 
 -- [E2] a pessoa é o supertipo: sem esta política, o aluno leria nome, e-mail,
 -- CPF e nascimento de TODO MUNDO — inclusive dos 3 mil egressos.
-CREATE POLICY pol_pessoa_so_ela_mesma ON pessoa
+CREATE POLICY pol_pessoa_so_ela_mesma ON tb_pessoa
   FOR SELECT TO papel_aluno
   USING (id_pessoa = pessoa_id_de(current_user::text));
 
 -- [E14] a nota saiu de historico e veio para cá; a política vem junto.
-CREATE POLICY pol_nota_so_do_aluno ON nota
+CREATE POLICY pol_nota_so_do_aluno ON tb_nota
   FOR SELECT TO papel_aluno
-  USING (EXISTS (SELECT 1 FROM matricula m
-                 WHERE m.id_matricula = nota.id_matricula
+  USING (EXISTS (SELECT 1 FROM tb_matricula m
+                 WHERE m.id_matricula = tb_nota.id_matricula
                    AND m.id_aluno = aluno_id_de(current_user::text)));
 
-CREATE POLICY pol_presenca_so_do_aluno ON presenca
+CREATE POLICY pol_presenca_so_do_aluno ON tb_presenca
   FOR SELECT TO papel_aluno
-  USING (EXISTS (SELECT 1 FROM matricula m
-                 WHERE m.id_matricula = presenca.id_matricula
+  USING (EXISTS (SELECT 1 FROM tb_matricula m
+                 WHERE m.id_matricula = tb_presenca.id_matricula
                    AND m.id_aluno = aluno_id_de(current_user::text)));
 
 -- Secretaria: acesso operacional integral às linhas
-CREATE POLICY pol_secretaria_aluno     ON aluno     TO secretaria USING (true) WITH CHECK (true);
-CREATE POLICY pol_secretaria_matricula ON matricula TO secretaria USING (true) WITH CHECK (true);
-CREATE POLICY pol_secretaria_historico ON historico TO secretaria USING (true) WITH CHECK (true);
-CREATE POLICY pol_secretaria_pessoa    ON pessoa    TO secretaria USING (true) WITH CHECK (true);
-CREATE POLICY pol_secretaria_nota      ON nota      TO secretaria USING (true) WITH CHECK (true);
-CREATE POLICY pol_secretaria_presenca  ON presenca  TO secretaria USING (true) WITH CHECK (true);
+CREATE POLICY pol_secretaria_aluno     ON tb_aluno     TO secretaria USING (true) WITH CHECK (true);
+CREATE POLICY pol_secretaria_matricula ON tb_matricula TO secretaria USING (true) WITH CHECK (true);
+CREATE POLICY pol_secretaria_historico ON tb_historico TO secretaria USING (true) WITH CHECK (true);
+CREATE POLICY pol_secretaria_pessoa    ON tb_pessoa    TO secretaria USING (true) WITH CHECK (true);
+CREATE POLICY pol_secretaria_nota      ON tb_nota      TO secretaria USING (true) WITH CHECK (true);
+CREATE POLICY pol_secretaria_presenca  ON tb_presenca  TO secretaria USING (true) WITH CHECK (true);
 
 -- Coordenação: leitura integral
-CREATE POLICY pol_coordenacao_aluno     ON aluno     FOR SELECT TO coordenacao USING (true);
-CREATE POLICY pol_coordenacao_matricula ON matricula FOR SELECT TO coordenacao USING (true);
-CREATE POLICY pol_coordenacao_historico ON historico FOR SELECT TO coordenacao USING (true);
-CREATE POLICY pol_coordenacao_pessoa    ON pessoa    FOR SELECT TO coordenacao USING (true);
-CREATE POLICY pol_coordenacao_nota      ON nota      FOR SELECT TO coordenacao USING (true);
-CREATE POLICY pol_coordenacao_presenca  ON presenca  FOR SELECT TO coordenacao USING (true);
+CREATE POLICY pol_coordenacao_aluno     ON tb_aluno     FOR SELECT TO coordenacao USING (true);
+CREATE POLICY pol_coordenacao_matricula ON tb_matricula FOR SELECT TO coordenacao USING (true);
+CREATE POLICY pol_coordenacao_historico ON tb_historico FOR SELECT TO coordenacao USING (true);
+CREATE POLICY pol_coordenacao_pessoa    ON tb_pessoa    FOR SELECT TO coordenacao USING (true);
+CREATE POLICY pol_coordenacao_nota      ON tb_nota      FOR SELECT TO coordenacao USING (true);
+CREATE POLICY pol_coordenacao_presenca  ON tb_presenca  FOR SELECT TO coordenacao USING (true);
 
 -- ----------------------------------------------------------------------------
 -- 5. Demonstração (a exigida na apresentação: aluno NÃO vê histórico alheio)
 -- ----------------------------------------------------------------------------
 SELECT 'al_' || a.matricula_aluno AS papel_a
-FROM aluno a JOIN matricula m ON m.id_aluno = a.id_aluno AND m.status_matricula = 'confirmada'
+FROM tb_aluno a JOIN tb_matricula m ON m.id_aluno = a.id_aluno AND m.status_matricula = 'confirmada'
 GROUP BY a.id_aluno ORDER BY count(*) DESC, a.id_aluno LIMIT 1 \gset
 
 \echo ''
 \echo '=== DEMO RLS — visão do banco como cada papel ==='
 \echo '-- Como DBA (bd2): total de linhas de histórico visíveis:'
-SELECT count(*) AS historico_total FROM historico;
+SELECT count(*) AS historico_total FROM tb_historico;
 
 SET ROLE :"papel_a";
 \echo '-- Como' :'papel_a' '(aluno): linhas de histórico visíveis (só as dele):'
-SELECT count(*) AS historico_visivel FROM historico;
+SELECT count(*) AS historico_visivel FROM tb_historico;
 \echo '-- Como' :'papel_a' ': o histórico detalhado via view (RLS atravessa a view):'
-SELECT periodo, disciplina, notas, media_final, frequencia, situacao_historico
-FROM v_historico_aluno LIMIT 5;
+SELECT periodo, tb_disciplina, notas, media_final, frequencia, situacao_historico
+FROM vw_historico_aluno LIMIT 5;
 \echo '-- Como' :'papel_a' ': tentando enxergar OUTROS alunos na tabela aluno:'
-SELECT count(*) AS alunos_visiveis FROM aluno;
+SELECT count(*) AS alunos_visiveis FROM tb_aluno;
 \echo '-- Como' :'papel_a' ': o buraco que a ampliação abriu, agora fechado —'
 \echo '   pessoas visíveis (de 3.132) e notas visíveis (de ~60 mil):'
-SELECT (SELECT count(*) FROM pessoa) AS pessoas_visiveis,
-       (SELECT count(*) FROM nota)   AS notas_visiveis,
-       (SELECT count(*) FROM presenca) AS presencas_visiveis;
+SELECT (SELECT count(*) FROM tb_pessoa) AS pessoas_visiveis,
+       (SELECT count(*) FROM tb_nota)   AS notas_visiveis,
+       (SELECT count(*) FROM tb_presenca) AS presencas_visiveis;
 RESET ROLE;
 
 SET ROLE coordenacao;
 \echo '-- Como coordenacao: leitura ampla (todos os históricos):'
-SELECT count(*) AS historico_visivel FROM historico;
+SELECT count(*) AS historico_visivel FROM tb_historico;
 RESET ROLE;
 
 \echo '=== fim da demo RLS ==='
