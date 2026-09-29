@@ -29,22 +29,61 @@ SET search_path TO academico, public;
 
 -- [C7] pré-requisito reflexivo (disciplina exige a si mesma)
 DO $$
+DECLARE pr tb_pre_requisito%ROWTYPE;
 BEGIN
+  SELECT * INTO pr FROM tb_pre_requisito LIMIT 1;
   BEGIN
-    INSERT INTO pre_requisito (id_disciplina, id_requisito)
-    SELECT id_disciplina, id_disciplina FROM disciplina WHERE codigo_disciplina = 'BD2';
+    INSERT INTO tb_pre_requisito (id_curriculo, id_disciplina, id_requisito)
+    VALUES (pr.id_curriculo, pr.id_disciplina, pr.id_disciplina);
     RAISE EXCEPTION 'TESTE FALHOU: aceitou pré-requisito reflexivo (C7)';
   EXCEPTION WHEN check_violation THEN
     RAISE NOTICE 'OK  [C7] pré-requisito reflexivo rejeitado (check_violation)';
   END;
 END $$;
 
+-- [E17] requisito que NÃO está na matriz: a FK composta barra. É a garantia
+-- nova — antes, "BD2 exige BD1" podia apontar para matéria fora do currículo.
+DO $$
+DECLARE cur integer; disc integer; fora integer;
+BEGIN
+  SELECT cd.id_curriculo, cd.id_disciplina INTO cur, disc
+  FROM tb_curriculo_disciplina cd LIMIT 1;
+  SELECT d.id_disciplina INTO fora
+  FROM tb_disciplina d
+  WHERE NOT EXISTS (SELECT 1 FROM tb_curriculo_disciplina x
+                    WHERE x.id_curriculo = cur AND x.id_disciplina = d.id_disciplina)
+  LIMIT 1;
+  BEGIN
+    INSERT INTO tb_pre_requisito (id_curriculo, id_disciplina, id_requisito)
+    VALUES (cur, disc, fora);
+    RAISE EXCEPTION 'TESTE FALHOU: aceitou requisito fora da matriz (E17)';
+  EXCEPTION WHEN foreign_key_violation THEN
+    RAISE NOTICE 'OK  [E17] requisito fora do currículo rejeitado (FK composta)';
+  END;
+END $$;
+
+-- [E19] o trigger de auditoria grava sozinho: nenhuma aplicação precisa lembrar
+DO $$
+DECLARE antes bigint; depois bigint; alvo integer;
+BEGIN
+  SELECT count(*) INTO antes FROM tb_log_auditoria;
+  SELECT id_matricula INTO alvo FROM tb_matricula ORDER BY id_matricula LIMIT 1;
+  UPDATE tb_matricula SET status_matricula = status_matricula WHERE id_matricula = alvo;
+  SELECT count(*) INTO depois FROM tb_log_auditoria;
+  IF depois <> antes + 1 THEN
+    RAISE EXCEPTION 'TESTE FALHOU: UPDATE não gerou linha de auditoria (E19)';
+  END IF;
+  RAISE NOTICE 'OK  [E19] UPDATE gerou trilha de auditoria automaticamente (trigger)';
+  RAISE EXCEPTION 'rollback proposital';
+EXCEPTION WHEN raise_exception THEN NULL;
+END $$;
+
 -- [C2] matrícula duplicada (mesmo aluno, mesma turma)
 DO $$
 BEGIN
   BEGIN
-    INSERT INTO matricula (id_aluno, id_turma)
-    SELECT id_aluno, id_turma FROM matricula LIMIT 1;
+    INSERT INTO tb_matricula (id_aluno, id_turma)
+    SELECT id_aluno, id_turma FROM tb_matricula LIMIT 1;
     RAISE EXCEPTION 'TESTE FALHOU: aceitou matrícula duplicada (C2)';
   EXCEPTION WHEN unique_violation THEN
     RAISE NOTICE 'OK  [C2] matrícula duplicada rejeitada (unique_violation)';
@@ -55,7 +94,7 @@ END $$;
 DO $$
 BEGIN
   BEGIN
-    INSERT INTO periodo_letivo (ano_periodo_letivo, semestre_periodo_letivo, data_inicio_periodo_letivo, data_fim_periodo_letivo)
+    INSERT INTO tb_periodo_letivo (ano_periodo_letivo, semestre_periodo_letivo, data_inicio_periodo_letivo, data_fim_periodo_letivo)
     VALUES (2026, 2, DATE '2026-08-01', DATE '2026-12-15');
     RAISE EXCEPTION 'TESTE FALHOU: aceitou período letivo duplicado (C3)';
   EXCEPTION WHEN unique_violation THEN
@@ -65,11 +104,11 @@ END $$;
 
 -- [C4→E5] mesmo código de sala no MESMO prédio
 DO $$
-DECLARE s sala%ROWTYPE;
+DECLARE s tb_sala%ROWTYPE;
 BEGIN
-  SELECT * INTO s FROM sala ORDER BY id_sala LIMIT 1;
+  SELECT * INTO s FROM tb_sala ORDER BY id_sala LIMIT 1;
   BEGIN
-    INSERT INTO sala (id_predio, codigo_sala, capacidade_sala)
+    INSERT INTO tb_sala (id_predio, codigo_sala, capacidade_sala)
     VALUES (s.id_predio, s.codigo_sala, 30);
     RAISE EXCEPTION 'TESTE FALHOU: aceitou código de sala repetido no mesmo prédio (C4/E5)';
   EXCEPTION WHEN unique_violation THEN
@@ -81,20 +120,20 @@ END $$;
 -- no MESMO período letivo
 DO $$
 DECLARE
-  h turma_horario%ROWTYPE;
+  h tb_turma_horario%ROWTYPE;
   outra integer;
 BEGIN
-  SELECT * INTO h FROM turma_horario
+  SELECT * INTO h FROM tb_turma_horario
   WHERE id_sala IS NOT NULL ORDER BY id_turma_horario LIMIT 1;   -- [E12] EAD não entra
   SELECT t.id_turma INTO outra
-  FROM turma t
+  FROM tb_turma t
   WHERE t.id_periodo_letivo = h.id_periodo_letivo AND t.id_turma <> h.id_turma
-    AND NOT EXISTS (SELECT 1 FROM turma_horario x       -- evita cair no ex_turma_sem_choque
+    AND NOT EXISTS (SELECT 1 FROM tb_turma_horario x       -- evita cair no ex_turma_sem_choque
                     WHERE x.id_turma = t.id_turma AND x.dia_semana_turma_horario = h.dia_semana_turma_horario
                       AND x.faixa_turma_horario && h.faixa_turma_horario)
   LIMIT 1;
   BEGIN
-    INSERT INTO turma_horario (id_turma, id_periodo_letivo, id_sala, dia_semana_turma_horario, faixa_turma_horario)
+    INSERT INTO tb_turma_horario (id_turma, id_periodo_letivo, id_sala, dia_semana_turma_horario, faixa_turma_horario)
     VALUES (outra, h.id_periodo_letivo, h.id_sala, h.dia_semana_turma_horario, h.faixa_turma_horario);
     RAISE EXCEPTION 'TESTE FALHOU: aceitou duas turmas na mesma sala/horário (C10)';
   EXCEPTION WHEN exclusion_violation THEN
@@ -105,13 +144,13 @@ END $$;
 -- [C6] aluno apontando currículo de OUTRO curso (a FK composta barra)
 DO $$
 DECLARE
-  al aluno%ROWTYPE;
+  al tb_aluno%ROWTYPE;
   curriculo_errado integer;
 BEGIN
-  SELECT * INTO al FROM aluno ORDER BY id_aluno LIMIT 1;
-  SELECT id_curriculo INTO curriculo_errado FROM curriculo WHERE id_curso <> al.id_curso LIMIT 1;
+  SELECT * INTO al FROM tb_aluno ORDER BY id_aluno LIMIT 1;
+  SELECT id_curriculo INTO curriculo_errado FROM tb_curriculo WHERE id_curso <> al.id_curso LIMIT 1;
   BEGIN
-    UPDATE aluno SET id_curriculo = curriculo_errado WHERE id_aluno = al.id_aluno;
+    UPDATE tb_aluno SET id_curriculo = curriculo_errado WHERE id_aluno = al.id_aluno;
     RAISE EXCEPTION 'TESTE FALHOU: aceitou currículo de outro curso (C6)';
   EXCEPTION WHEN foreign_key_violation THEN
     RAISE NOTICE 'OK  [C6] currículo de outro curso rejeitado (foreign_key_violation composta)';
@@ -122,11 +161,11 @@ END $$;
 -- com [E14], mas o DOMÍNIO viajou junto com ela: é essa a vantagem de domínio
 -- sobre CHECK solto na coluna.
 DO $$
-DECLARE n nota%ROWTYPE;
+DECLARE n tb_nota%ROWTYPE;
 BEGIN
-  SELECT * INTO n FROM nota ORDER BY id_avaliacao, id_matricula LIMIT 1;
+  SELECT * INTO n FROM tb_nota ORDER BY id_avaliacao, id_matricula LIMIT 1;
   BEGIN
-    UPDATE nota SET valor_nota = 11
+    UPDATE tb_nota SET valor_nota = 11
     WHERE id_avaliacao = n.id_avaliacao AND id_matricula = n.id_matricula;
     RAISE EXCEPTION 'TESTE FALHOU: aceitou nota 11 (C12)';
   EXCEPTION WHEN check_violation THEN
@@ -138,11 +177,11 @@ END $$;
 -- PARCIAL por nível do arco, em vez de UNIQUE NULLS NOT DISTINCT), mas a
 -- garantia é a mesma: não existe o mesmo feriado duas vezes no mesmo alcance.
 DO $$
-DECLARE f feriado%ROWTYPE;
+DECLARE f tb_feriado%ROWTYPE;
 BEGIN
-  SELECT * INTO f FROM feriado WHERE id_pais IS NOT NULL ORDER BY id_feriado LIMIT 1;
+  SELECT * INTO f FROM tb_feriado WHERE id_pais IS NOT NULL ORDER BY id_feriado LIMIT 1;
   BEGIN
-    INSERT INTO feriado (id_pais, descricao_feriado, data_feriado)
+    INSERT INTO tb_feriado (id_pais, descricao_feriado, data_feriado)
     VALUES (f.id_pais, 'Feriado nacional duplicado', f.data_feriado);
     RAISE EXCEPTION 'TESTE FALHOU: aceitou feriado nacional duplicado (C9)';
   EXCEPTION WHEN unique_violation THEN
@@ -155,8 +194,8 @@ END $$;
 DO $$
 BEGIN
   BEGIN
-    UPDATE disciplina SET ch_total_disciplina = 999
-    WHERE id_disciplina = (SELECT id_disciplina FROM disciplina ORDER BY id_disciplina LIMIT 1);
+    UPDATE tb_disciplina SET ch_total_disciplina = 999
+    WHERE id_disciplina = (SELECT id_disciplina FROM tb_disciplina ORDER BY id_disciplina LIMIT 1);
     RAISE EXCEPTION 'TESTE FALHOU: aceitou escrita direta em coluna gerada (C13)';
   EXCEPTION WHEN generated_always THEN
     RAISE NOTICE 'OK  [C13] escrita direta em ch_total_disciplina rejeitada (generated_always)';
@@ -170,9 +209,9 @@ END $$;
 DO $$
 DECLARE c cpf_t;
 BEGIN
-  SELECT cpf_pessoa INTO c FROM pessoa ORDER BY id_pessoa LIMIT 1;
+  SELECT cpf_pessoa INTO c FROM tb_pessoa ORDER BY id_pessoa LIMIT 1;
   BEGIN
-    INSERT INTO pessoa (nome_pessoa, email_pessoa, cpf_pessoa, nascimento_pessoa)
+    INSERT INTO tb_pessoa (nome_pessoa, email_pessoa, cpf_pessoa, nascimento_pessoa)
     VALUES ('Clone do CPF', 'clone.cpf@teste.iesb.br', c, DATE '2000-01-01');
     RAISE EXCEPTION 'TESTE FALHOU: aceitou CPF duplicado (E2)';
   EXCEPTION WHEN unique_violation THEN
@@ -185,9 +224,9 @@ END $$;
 DO $$
 DECLARE d integer;
 BEGIN
-  SELECT id_disciplina INTO d FROM plano_ensino WHERE id_turma IS NULL LIMIT 1;
+  SELECT id_disciplina INTO d FROM tb_plano_ensino WHERE id_turma IS NULL LIMIT 1;
   BEGIN
-    INSERT INTO plano_ensino (id_disciplina, id_turma, objetivo_plano_ensino)
+    INSERT INTO tb_plano_ensino (id_disciplina, id_turma, objetivo_plano_ensino)
     VALUES (d, NULL, 'Segundo plano base — não deveria entrar');
     RAISE EXCEPTION 'TESTE FALHOU: aceitou dois planos base para a mesma disciplina (E7)';
   EXCEPTION WHEN unique_violation THEN
@@ -199,10 +238,10 @@ END $$;
 DO $$
 DECLARE d integer; t integer;
 BEGIN
-  SELECT id_disciplina INTO d FROM disciplina WHERE codigo_disciplina = 'BD2';
-  SELECT tu.id_turma INTO t FROM turma tu WHERE tu.id_disciplina <> d LIMIT 1;
+  SELECT id_disciplina INTO d FROM tb_disciplina WHERE codigo_disciplina = 'BD2';
+  SELECT tu.id_turma INTO t FROM tb_turma tu WHERE tu.id_disciplina <> d LIMIT 1;
   BEGIN
-    INSERT INTO plano_ensino (id_disciplina, id_turma, objetivo_plano_ensino)
+    INSERT INTO tb_plano_ensino (id_disciplina, id_turma, objetivo_plano_ensino)
     VALUES (d, t, 'Plano de BD2 numa turma que não é de BD2');
     RAISE EXCEPTION 'TESTE FALHOU: aceitou plano em turma de outra disciplina (E7)';
   EXCEPTION WHEN foreign_key_violation THEN
@@ -212,12 +251,12 @@ END $$;
 
 -- [E8] duas coordenações do MESMO curso com vigências que se sobrepõem
 DO $$
-DECLARE c coordenacao_curso%ROWTYPE; outro integer;
+DECLARE c tb_coordenacao_curso%ROWTYPE; outro integer;
 BEGIN
-  SELECT * INTO c FROM coordenacao_curso ORDER BY id_coordenacao_curso LIMIT 1;
-  SELECT id_professor INTO outro FROM professor WHERE id_professor <> c.id_professor LIMIT 1;
+  SELECT * INTO c FROM tb_coordenacao_curso ORDER BY id_coordenacao_curso LIMIT 1;
+  SELECT id_professor INTO outro FROM tb_professor WHERE id_professor <> c.id_professor LIMIT 1;
   BEGIN
-    INSERT INTO coordenacao_curso (id_curso, id_professor, vigencia_coordenacao_curso)
+    INSERT INTO tb_coordenacao_curso (id_curso, id_professor, vigencia_coordenacao_curso)
     VALUES (c.id_curso, outro, c.vigencia_coordenacao_curso);
     RAISE EXCEPTION 'TESTE FALHOU: aceitou dois coordenadores simultâneos (E8)';
   EXCEPTION WHEN exclusion_violation THEN
@@ -227,11 +266,11 @@ END $$;
 
 -- [E9] duas janelas do MESMO tipo se sobrepondo no mesmo período letivo
 DO $$
-DECLARE pm periodo_matricula%ROWTYPE;
+DECLARE pm tb_periodo_matricula%ROWTYPE;
 BEGIN
-  SELECT * INTO pm FROM periodo_matricula ORDER BY id_periodo_matricula LIMIT 1;
+  SELECT * INTO pm FROM tb_periodo_matricula ORDER BY id_periodo_matricula LIMIT 1;
   BEGIN
-    INSERT INTO periodo_matricula (id_periodo_letivo, descricao_periodo_matricula, janela_periodo_matricula, tipo_periodo_matricula)
+    INSERT INTO tb_periodo_matricula (id_periodo_letivo, descricao_periodo_matricula, janela_periodo_matricula, tipo_periodo_matricula)
     VALUES (pm.id_periodo_letivo, 'Janela sobreposta', pm.janela_periodo_matricula, pm.tipo_periodo_matricula);
     RAISE EXCEPTION 'TESTE FALHOU: aceitou duas janelas do mesmo tipo sobrepostas (E9)';
   EXCEPTION WHEN exclusion_violation THEN
@@ -243,10 +282,10 @@ END $$;
 DO $$
 DECLARE p smallint; e smallint;
 BEGIN
-  SELECT id_pais INTO p FROM pais LIMIT 1;
-  SELECT id_estado INTO e FROM estado LIMIT 1;
+  SELECT id_pais INTO p FROM tb_pais LIMIT 1;
+  SELECT id_estado INTO e FROM tb_estado LIMIT 1;
   BEGIN
-    INSERT INTO feriado (id_pais, id_estado, descricao_feriado, data_feriado)
+    INSERT INTO tb_feriado (id_pais, id_estado, descricao_feriado, data_feriado)
     VALUES (p, e, 'Feriado nacional E estadual ao mesmo tempo', DATE '2026-12-31');
     RAISE EXCEPTION 'TESTE FALHOU: aceitou feriado com dois alcances (E10)';
   EXCEPTION WHEN check_violation THEN
@@ -256,12 +295,12 @@ END $$;
 
 -- [E11] um SEGUNDO titular na mesma turma (índice parcial único)
 DO $$
-DECLARE tp turma_professor%ROWTYPE; outro integer;
+DECLARE tp tb_turma_professor%ROWTYPE; outro integer;
 BEGIN
-  SELECT * INTO tp FROM turma_professor WHERE papel_turma_professor = 'titular' LIMIT 1;
-  SELECT id_professor INTO outro FROM professor WHERE id_professor <> tp.id_professor LIMIT 1;
+  SELECT * INTO tp FROM tb_turma_professor WHERE papel_turma_professor = 'titular' LIMIT 1;
+  SELECT id_professor INTO outro FROM tb_professor WHERE id_professor <> tp.id_professor LIMIT 1;
   BEGIN
-    INSERT INTO turma_professor (id_turma, id_professor, papel_turma_professor)
+    INSERT INTO tb_turma_professor (id_turma, id_professor, papel_turma_professor)
     VALUES (tp.id_turma, outro, 'titular');
     RAISE EXCEPTION 'TESTE FALHOU: aceitou dois titulares na mesma turma (E11)';
   EXCEPTION WHEN unique_violation THEN
@@ -272,12 +311,12 @@ END $$;
 -- [E13] a prova central da ampliação: nota de um aluno numa avaliação de
 -- OUTRA turma. Sem trigger nenhum: as duas FKs compostas se fecham em id_turma.
 DO $$
-DECLARE m matricula%ROWTYPE; av avaliacao%ROWTYPE;
+DECLARE m tb_matricula%ROWTYPE; av tb_avaliacao%ROWTYPE;
 BEGIN
-  SELECT * INTO m FROM matricula WHERE status_matricula = 'confirmada' ORDER BY id_matricula LIMIT 1;
-  SELECT * INTO av FROM avaliacao WHERE id_turma <> m.id_turma ORDER BY id_avaliacao LIMIT 1;
+  SELECT * INTO m FROM tb_matricula WHERE status_matricula = 'confirmada' ORDER BY id_matricula LIMIT 1;
+  SELECT * INTO av FROM tb_avaliacao WHERE id_turma <> m.id_turma ORDER BY id_avaliacao LIMIT 1;
   BEGIN
-    INSERT INTO nota (id_avaliacao, id_matricula, id_turma, valor_nota)
+    INSERT INTO tb_nota (id_avaliacao, id_matricula, id_turma, valor_nota)
     VALUES (av.id_avaliacao, m.id_matricula, m.id_turma, 8.0);
     RAISE EXCEPTION 'TESTE FALHOU: aceitou nota em avaliação de outra turma (E13)';
   EXCEPTION WHEN foreign_key_violation THEN
@@ -289,9 +328,9 @@ END $$;
 DO $$
 DECLARE t integer;
 BEGIN
-  SELECT id_turma INTO t FROM turma ORDER BY id_turma LIMIT 1;
+  SELECT id_turma INTO t FROM tb_turma ORDER BY id_turma LIMIT 1;
   BEGIN
-    INSERT INTO avaliacao (id_turma, nome_avaliacao, peso_avaliacao)
+    INSERT INTO tb_avaliacao (id_turma, nome_avaliacao, peso_avaliacao)
     VALUES (t, 'Peso absurdo', 42.00);
     RAISE EXCEPTION 'TESTE FALHOU: aceitou peso 42 (E14)';
   EXCEPTION WHEN check_violation THEN
@@ -309,12 +348,12 @@ DO $$
 DECLARE t1 integer; t2 integer; p smallint;
 BEGIN
   SELECT tu.id_turma, tu.id_periodo_letivo INTO t1, p
-  FROM turma tu JOIN periodo_letivo pl ON pl.id_periodo_letivo = tu.id_periodo_letivo
+  FROM tb_turma tu JOIN tb_periodo_letivo pl ON pl.id_periodo_letivo = tu.id_periodo_letivo
   WHERE pl.ano_periodo_letivo = 2026 AND pl.semestre_periodo_letivo = 2
   ORDER BY tu.id_turma LIMIT 1;
-  SELECT tu.id_turma INTO t2 FROM turma tu
+  SELECT tu.id_turma INTO t2 FROM tb_turma tu
   WHERE tu.id_periodo_letivo = p AND tu.id_turma <> t1 ORDER BY tu.id_turma LIMIT 1;
-  INSERT INTO turma_horario (id_turma, id_periodo_letivo, id_sala, dia_semana_turma_horario, faixa_turma_horario)
+  INSERT INTO tb_turma_horario (id_turma, id_periodo_letivo, id_sala, dia_semana_turma_horario, faixa_turma_horario)
   VALUES (t1, p, NULL, 6, timerange(TIME '14:00', TIME '15:40')),
          (t2, p, NULL, 6, timerange(TIME '14:00', TIME '15:40'));
   RAISE NOTICE 'OK  [E12] dois horários EAD no mesmo dia/faixa ACEITOS (EXCLUDE parcial)';
@@ -324,11 +363,11 @@ END $$;
 
 -- [C4→E5] o MESMO código de sala em prédios diferentes continua legal
 DO $$
-DECLARE s sala%ROWTYPE; outro_predio smallint;
+DECLARE s tb_sala%ROWTYPE; outro_predio smallint;
 BEGIN
-  SELECT * INTO s FROM sala ORDER BY id_sala LIMIT 1;
-  SELECT id_predio INTO outro_predio FROM predio WHERE id_predio <> s.id_predio LIMIT 1;
-  INSERT INTO sala (id_predio, codigo_sala, capacidade_sala)
+  SELECT * INTO s FROM tb_sala ORDER BY id_sala LIMIT 1;
+  SELECT id_predio INTO outro_predio FROM tb_predio WHERE id_predio <> s.id_predio LIMIT 1;
+  INSERT INTO tb_sala (id_predio, codigo_sala, capacidade_sala)
   VALUES (outro_predio, s.codigo_sala, 30);
   RAISE NOTICE 'OK  [C4→E5] mesmo código de sala em OUTRO prédio ACEITO';
   RAISE EXCEPTION 'rollback proposital';
@@ -337,6 +376,6 @@ END $$;
 
 \echo ''
 \echo '=== Fim dos testes — banco permanece íntegro (nenhuma linha gravada) ==='
-SELECT count(*) AS matriculas, (SELECT count(*) FROM nota) AS notas,
-       (SELECT count(*) FROM feriado) AS feriados, (SELECT count(*) FROM sala) AS salas
-FROM matricula;
+SELECT count(*) AS matriculas, (SELECT count(*) FROM tb_nota) AS notas,
+       (SELECT count(*) FROM tb_feriado) AS feriados, (SELECT count(*) FROM tb_sala) AS salas
+FROM tb_matricula;

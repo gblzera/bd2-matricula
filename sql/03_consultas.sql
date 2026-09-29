@@ -13,14 +13,14 @@
 -- por subconsulta) e rodam na carga do 02_carga.sql.
 --
 -- O QUE A AMPLIAÇÃO MUDOU AQUI (modelo de 41 tabelas):
---   · o nome do aluno e do professor vêm de `pessoa` [E2] — toda consulta que
+--   · o nome do aluno e do professor vêm de `tb_pessoa` [E2] — toda consulta que
 --     exibe gente passa a ter mais uma junção, e isso é o preço explícito de
 --     não repetir nome/CPF em duas tabelas;
---   · o professor da turma vem de `turma_professor` filtrando o TITULAR [E11];
---   · a sala vem de `predio` [E5] e pode ser NULL (turma EAD) [E12] — por isso
+--   · o professor da turma vem de `tb_turma_professor` filtrando o TITULAR [E11];
+--   · a sala vem de `tb_predio` [E5] e pode ser NULL (turma EAD) [E12] — por isso
 --     LEFT JOIN, não INNER: com INNER a turma EAD sumiria do relatório;
 --   · média e frequência não existem mais como coluna: vêm de
---     `v_desempenho_matricula`, derivadas de nota/presenca [E14].
+--     `vw_desempenho_matricula`, derivadas de nota/presenca [E14].
 -- Execução:  docker exec -i bd2_aluno_postgres psql -U bd2 -d matricula < sql/03_consultas.sql
 -- ============================================================================
 \set ON_ERROR_STOP on
@@ -39,15 +39,15 @@ SET search_path TO academico, public;
 -- Leitura: distribuição de alunos ativos/inativos por curso.
 -- ============================================================================
 \echo '=== C1: alunos por curso e campus ==='
-SELECT cp.nome_campus                                   AS campus,
-       c.codigo_curso                                  AS curso,
+SELECT cp.nome_campus                                   AS tb_campus,
+       c.codigo_curso                                  AS tb_curso,
        c.nome_curso                                    AS nome_curso,
        count(a.id_aluno) FILTER (WHERE a.status_aluno = 'ativo')     AS ativos,
        count(a.id_aluno) FILTER (WHERE a.status_aluno <> 'ativo')    AS inativos,
        count(a.id_aluno)                               AS total
-FROM curso c
-JOIN campus cp     ON cp.id_campus = c.id_campus
-LEFT JOIN aluno a  ON a.id_curso = c.id_curso
+FROM tb_curso c
+JOIN tb_campus cp     ON cp.id_campus = c.id_campus
+LEFT JOIN tb_aluno a  ON a.id_curso = c.id_curso
 GROUP BY cp.nome_campus, c.id_curso
 ORDER BY cp.nome_campus, total DESC;
 
@@ -60,40 +60,40 @@ ORDER BY cp.nome_campus, total DESC;
 \echo '=== C2: grade horária do aluno mais matriculado de 2026/2 ==='
 WITH alvo AS (
   SELECT m.id_aluno
-  FROM matricula m
-  JOIN turma t           ON t.id_turma = m.id_turma
-  JOIN periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
+  FROM tb_matricula m
+  JOIN tb_turma t           ON t.id_turma = m.id_turma
+  JOIN tb_periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
   WHERE pl.ano_periodo_letivo = 2026 AND pl.semestre_periodo_letivo = 2 AND m.status_matricula = 'confirmada'
   GROUP BY m.id_aluno
   ORDER BY count(*) DESC, m.id_aluno
   LIMIT 1
 )
-SELECT pa.nome_pessoa                                                          AS aluno,
+SELECT pa.nome_pessoa                                                          AS tb_aluno,
        (ARRAY['seg','ter','qua','qui','sex','sab','dom'])[th.dia_semana_turma_horario] AS dia,
        left(lower(th.faixa_turma_horario)::text, 5) || '–' ||
        left(upper(th.faixa_turma_horario)::text, 5)                            AS horario,
-       d.codigo_disciplina                                                     AS disciplina,
-       t.codigo_turma                                                          AS turma,
-       coalesce(s.codigo_sala, '(EAD)')                                        AS sala,
-       coalesce(pr.nome_predio, '—')                                           AS predio,
-       coalesce(cp.nome_campus, t.modalidade_turma::text)                      AS campus,
-       pp.nome_pessoa                                                          AS professor
+       d.codigo_disciplina                                                     AS tb_disciplina,
+       t.codigo_turma                                                          AS tb_turma,
+       coalesce(s.codigo_sala, '(EAD)')                                        AS tb_sala,
+       coalesce(pr.nome_predio, '—')                                           AS tb_predio,
+       coalesce(cp.nome_campus, t.modalidade_turma::text)                      AS tb_campus,
+       pp.nome_pessoa                                                          AS tb_professor
 FROM alvo
-JOIN aluno a           ON a.id_aluno = alvo.id_aluno
-JOIN pessoa pa         ON pa.id_pessoa = a.id_pessoa                     -- [E2]
-JOIN matricula m       ON m.id_aluno = a.id_aluno AND m.status_matricula = 'confirmada'
-JOIN turma t           ON t.id_turma = m.id_turma
-JOIN periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
+JOIN tb_aluno a           ON a.id_aluno = alvo.id_aluno
+JOIN tb_pessoa pa         ON pa.id_pessoa = a.id_pessoa                     -- [E2]
+JOIN tb_matricula m       ON m.id_aluno = a.id_aluno AND m.status_matricula = 'confirmada'
+JOIN tb_turma t           ON t.id_turma = m.id_turma
+JOIN tb_periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
                       AND pl.ano_periodo_letivo = 2026 AND pl.semestre_periodo_letivo = 2
-JOIN disciplina d      ON d.id_disciplina = t.id_disciplina
-JOIN turma_professor tp ON tp.id_turma = t.id_turma
+JOIN tb_disciplina d      ON d.id_disciplina = t.id_disciplina
+JOIN tb_turma_professor tp ON tp.id_turma = t.id_turma
                       AND tp.papel_turma_professor = 'titular'           -- [E11]
-JOIN professor p       ON p.id_professor = tp.id_professor
-JOIN pessoa pp         ON pp.id_pessoa = p.id_pessoa                     -- [E2]
-JOIN turma_horario th  ON th.id_turma = t.id_turma
-LEFT JOIN sala s       ON s.id_sala = th.id_sala                         -- NULL = EAD [E12]
-LEFT JOIN predio pr    ON pr.id_predio = s.id_predio                     -- [E5]
-LEFT JOIN campus cp    ON cp.id_campus = pr.id_campus
+JOIN tb_professor p       ON p.id_professor = tp.id_professor
+JOIN tb_pessoa pp         ON pp.id_pessoa = p.id_pessoa                     -- [E2]
+JOIN tb_turma_horario th  ON th.id_turma = t.id_turma
+LEFT JOIN tb_sala s       ON s.id_sala = th.id_sala                         -- NULL = EAD [E12]
+LEFT JOIN tb_predio pr    ON pr.id_predio = s.id_predio                     -- [E5]
+LEFT JOIN tb_campus cp    ON cp.id_campus = pr.id_campus
 ORDER BY th.dia_semana_turma_horario, lower(th.faixa_turma_horario);
 
 -- ============================================================================
@@ -105,8 +105,8 @@ ORDER BY th.dia_semana_turma_horario, lower(th.faixa_turma_horario);
 -- Leitura: painel de vagas_turma para a secretaria; base da view de oferta (Marco 2).
 -- ============================================================================
 \echo '=== C3: ocupação das turmas 2026/2 (junção externa + agregação) ==='
-SELECT t.codigo_turma                                                   AS turma,
-       d.nome_disciplina                                                     AS disciplina,
+SELECT t.codigo_turma                                                   AS tb_turma,
+       d.nome_disciplina                                                     AS tb_disciplina,
        t.turno_turma,
        t.vagas_turma,
        count(m.id_matricula) FILTER (WHERE m.status_matricula = 'confirmada')         AS confirmadas,
@@ -114,11 +114,11 @@ SELECT t.codigo_turma                                                   AS turma
        t.vagas_turma - count(m.id_matricula) FILTER (WHERE m.status_matricula = 'confirmada') AS vagas_livres,
        round(100.0 * count(m.id_matricula) FILTER (WHERE m.status_matricula = 'confirmada')
              / NULLIF(t.vagas_turma, 0), 1)                             AS ocupacao_pct
-FROM turma t
-JOIN periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
+FROM tb_turma t
+JOIN tb_periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
                       AND pl.ano_periodo_letivo = 2026 AND pl.semestre_periodo_letivo = 2
-JOIN disciplina d      ON d.id_disciplina = t.id_disciplina
-LEFT JOIN matricula m  ON m.id_turma = t.id_turma
+JOIN tb_disciplina d      ON d.id_disciplina = t.id_disciplina
+LEFT JOIN tb_matricula m  ON m.id_turma = t.id_turma
 GROUP BY t.id_turma, d.nome_disciplina
 ORDER BY ocupacao_pct DESC NULLS LAST, t.codigo_turma;
 
@@ -138,14 +138,14 @@ SELECT d.codigo_disciplina,
        count(*) FILTER (WHERE h.situacao_historico = 'reprovado_frequencia') AS rep_freq,
        round(100.0 * count(*) FILTER (WHERE h.situacao_historico = 'aprovado')
              / count(*), 1)                                      AS aprovacao_pct
-FROM disciplina d
-JOIN turma t           ON t.id_disciplina = d.id_disciplina
-JOIN periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
+FROM tb_disciplina d
+JOIN tb_turma t           ON t.id_disciplina = d.id_disciplina
+JOIN tb_periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
                       AND (pl.ano_periodo_letivo, pl.semestre_periodo_letivo) < (2026, 2)
-JOIN matricula m       ON m.id_turma = t.id_turma
-JOIN historico h       ON h.id_matricula = m.id_matricula
+JOIN tb_matricula m       ON m.id_turma = t.id_turma
+JOIN tb_historico h       ON h.id_matricula = m.id_matricula
                       AND h.situacao_historico IN ('aprovado', 'reprovado_nota', 'reprovado_frequencia')
-LEFT JOIN v_desempenho_matricula dm ON dm.id_matricula = m.id_matricula     -- [E14]
+LEFT JOIN vw_desempenho_matricula dm ON dm.id_matricula = m.id_matricula     -- [E14]
 GROUP BY d.id_disciplina
 HAVING count(h.id_historico) >= 10
 ORDER BY aprovacao_pct, d.codigo_disciplina;
@@ -162,24 +162,36 @@ ORDER BY aprovacao_pct, d.codigo_disciplina;
 -- Leitura: tudo que é preciso cursar (transitivamente) antes de TABD.
 -- ============================================================================
 \echo '=== C5: árvore de pré-requisitos de TABD (recursiva) ==='
-WITH RECURSIVE arvore (node_id, nivel, caminho, vinculo) AS (
+-- [E17] a árvore agora é de UMA MATRIZ: a cadeia é decisão do currículo, e
+-- currículos diferentes encadeiam diferente. O alvo é a matriz vigente de CC.
+WITH RECURSIVE
+matriz AS (
+  SELECT cu.id_curriculo
+  FROM tb_curriculo cu
+  JOIN tb_curso c ON c.id_curso = cu.id_curso
+  WHERE c.codigo_curso = 'CC' AND cu.ativo_curriculo
+  ORDER BY cu.ano_vigencia_curriculo DESC
+  LIMIT 1
+),
+arvore (node_id, nivel, caminho) AS (
   -- âncora: a própria disciplina-alvo
-  SELECT d.id_disciplina, 0, ARRAY[d.id_disciplina], NULL::vinculo_t
-  FROM disciplina d
+  SELECT d.id_disciplina, 0, ARRAY[d.id_disciplina]
+  FROM tb_disciplina d
   WHERE d.codigo_disciplina = 'TABD'
   UNION ALL
-  -- passo: para cada nó, busca seus requisitos diretos
-  SELECT p.id_requisito, a.nivel + 1, a.caminho || p.id_requisito, p.vinculo_pre_requisito
+  -- passo: os requisitos diretos DAQUELA matriz
+  SELECT p.id_requisito, a.nivel + 1, a.caminho || p.id_requisito
   FROM arvore a
-  JOIN pre_requisito p ON p.id_disciplina = a.node_id
+  JOIN tb_pre_requisito p ON p.id_disciplina = a.node_id
+                         AND p.id_curriculo = (SELECT id_curriculo FROM matriz)
   WHERE NOT p.id_requisito = ANY (a.caminho)      -- proteção contra ciclos
 )
 SELECT repeat('    ', a.nivel) || d.codigo_disciplina AS arvore,
        d.nome_disciplina,
        a.nivel,
-       coalesce(a.vinculo::text, '(alvo)') AS vinculo
+       CASE WHEN a.nivel = 0 THEN '(alvo)' ELSE 'pré-requisito' END AS vinculo
 FROM arvore a
-JOIN disciplina d ON d.id_disciplina = a.node_id
+JOIN tb_disciplina d ON d.id_disciplina = a.node_id
 ORDER BY a.caminho;
 
 -- ============================================================================
@@ -192,26 +204,26 @@ ORDER BY a.caminho;
 --   Por que o array? O PostgreSQL proíbe referenciar o CTE recursivo em
 --   subconsulta/agregação dentro do passo recursivo; carregar o conjunto
 --   acumulado como array na própria linha contorna isso de forma elegante.
---   Co-requisitos (vinculo <> 'pre_requisito') não bloqueiam a liberação.
+--   [E17] os pré-requisitos consultados são os DA MATRIZ do aluno.
 -- Leitura: o "plano de matrícula" possível do aluno, semestre a semestre.
 -- ============================================================================
 \echo '=== C6: disciplinas liberadas para o aluno com mais aprovações (recursiva) ==='
 WITH RECURSIVE
 alvo AS (                               -- aluno com mais disciplinas aprovadas
   SELECT m.id_aluno AS id_aluno, a.id_curriculo, p.nome_pessoa AS nome_aluno
-  FROM matricula m
-  JOIN historico h ON h.id_matricula = m.id_matricula AND h.situacao_historico = 'aprovado'
-  JOIN aluno a     ON a.id_aluno = m.id_aluno
-  JOIN pessoa p    ON p.id_pessoa = a.id_pessoa                            -- [E2]
+  FROM tb_matricula m
+  JOIN tb_historico h ON h.id_matricula = m.id_matricula AND h.situacao_historico = 'aprovado'
+  JOIN tb_aluno a     ON a.id_aluno = m.id_aluno
+  JOIN tb_pessoa p    ON p.id_pessoa = a.id_pessoa                            -- [E2]
   GROUP BY m.id_aluno, a.id_curriculo, p.nome_pessoa
   ORDER BY count(*) DESC, m.id_aluno
   LIMIT 1
 ),
 aprovadas AS (                          -- conjunto-base: o que ele já aprovou
   SELECT DISTINCT t.id_disciplina
-  FROM matricula m
-  JOIN turma t     ON t.id_turma = m.id_turma
-  JOIN historico h ON h.id_matricula = m.id_matricula
+  FROM tb_matricula m
+  JOIN tb_turma t     ON t.id_turma = m.id_turma
+  JOIN tb_historico h ON h.id_matricula = m.id_matricula
   WHERE m.id_aluno = (SELECT id_aluno FROM alvo) AND h.situacao_historico = 'aprovado'
 ),
 expansao (nivel, feitas, novas) AS (
@@ -224,21 +236,21 @@ expansao (nivel, feitas, novas) AS (
   CROSS JOIN LATERAL (
     SELECT ARRAY(
       SELECT cd.id_disciplina
-      FROM curriculo_disciplina cd
+      FROM tb_curriculo_disciplina cd
       WHERE cd.id_curriculo = (SELECT id_curriculo FROM alvo)
         AND cd.id_disciplina <> ALL (e.feitas)          -- ainda não feita
         AND NOT EXISTS (                                -- nenhum pré-req pendente
               SELECT 1
-              FROM pre_requisito p
+              FROM tb_pre_requisito p
               WHERE p.id_disciplina = cd.id_disciplina
-                AND p.vinculo_pre_requisito = 'pre_requisito'
+                AND p.id_curriculo   = cd.id_curriculo      -- [E17]
                 AND NOT (p.id_requisito = ANY (e.feitas)))
       ORDER BY cd.id_disciplina
     ) AS novas
   ) x
   WHERE cardinality(x.novas) > 0 AND e.nivel < 12       -- término garantido
 )
-SELECT (SELECT nome_aluno FROM alvo)               AS aluno,
+SELECT (SELECT nome_aluno FROM alvo)               AS tb_aluno,
        e.nivel                               AS onda,
        CASE e.nivel WHEN 1 THEN 'PODE CURSAR JÁ'
                     ELSE 'destrava na onda ' || e.nivel END AS quando,
@@ -248,8 +260,8 @@ SELECT (SELECT nome_aluno FROM alvo)               AS aluno,
        cd.tipo_curriculo_disciplina
 FROM expansao e
 CROSS JOIN LATERAL unnest(e.novas) AS n(id_disciplina)
-JOIN disciplina d            ON d.id_disciplina = n.id_disciplina
-JOIN curriculo_disciplina cd ON cd.id_disciplina = d.id_disciplina
+JOIN tb_disciplina d            ON d.id_disciplina = n.id_disciplina
+JOIN tb_curriculo_disciplina cd ON cd.id_disciplina = d.id_disciplina
                             AND cd.id_curriculo = (SELECT id_curriculo FROM alvo)
 WHERE e.nivel >= 1
 ORDER BY e.nivel, d.codigo_disciplina;
@@ -265,27 +277,27 @@ ORDER BY e.nivel, d.codigo_disciplina;
 -- ============================================================================
 \echo '=== C7: ranking + percentil de rendimento por curso (janela) ==='
 WITH rendimento AS (
-  SELECT a.id_aluno, a.matricula_aluno, p.nome_pessoa AS nome_aluno, c.codigo_curso AS curso,
+  SELECT a.id_aluno, a.matricula_aluno, p.nome_pessoa AS nome_aluno, c.codigo_curso AS tb_curso,
          round(sum(dm.media_final * d.ch_total_disciplina) / sum(d.ch_total_disciplina), 2) AS cr,
          count(*) AS disciplinas_avaliadas
-  FROM aluno a
-  JOIN pessoa p    ON p.id_pessoa = a.id_pessoa                            -- [E2]
-  JOIN curso c     ON c.id_curso = a.id_curso
-  JOIN matricula m ON m.id_aluno = a.id_aluno
-  JOIN turma t     ON t.id_turma = m.id_turma
-  JOIN disciplina d ON d.id_disciplina = t.id_disciplina
-  JOIN v_desempenho_matricula dm ON dm.id_matricula = m.id_matricula        -- [E14]
+  FROM tb_aluno a
+  JOIN tb_pessoa p    ON p.id_pessoa = a.id_pessoa                            -- [E2]
+  JOIN tb_curso c     ON c.id_curso = a.id_curso
+  JOIN tb_matricula m ON m.id_aluno = a.id_aluno
+  JOIN tb_turma t     ON t.id_turma = m.id_turma
+  JOIN tb_disciplina d ON d.id_disciplina = t.id_disciplina
+  JOIN vw_desempenho_matricula dm ON dm.id_matricula = m.id_matricula        -- [E14]
                                 AND dm.media_final IS NOT NULL
   GROUP BY a.id_aluno, p.nome_pessoa, c.codigo_curso
   HAVING count(*) >= 3
 )
-SELECT curso, matricula_aluno, nome_aluno, cr, disciplinas_avaliadas,   -- matrícula desambigua homônimos
-       rank()         OVER (PARTITION BY curso ORDER BY cr DESC)      AS posicao,
-       round((percent_rank() OVER (PARTITION BY curso ORDER BY cr))::numeric
+SELECT tb_curso, matricula_aluno, nome_aluno, cr, disciplinas_avaliadas,   -- matrícula desambigua homônimos
+       rank()         OVER (PARTITION BY tb_curso ORDER BY cr DESC)      AS posicao,
+       round((percent_rank() OVER (PARTITION BY tb_curso ORDER BY cr))::numeric
              * 100, 1)                                                AS percentil,
-       ntile(4)       OVER (PARTITION BY curso ORDER BY cr DESC)      AS quartil
+       ntile(4)       OVER (PARTITION BY tb_curso ORDER BY cr DESC)      AS quartil
 FROM rendimento
-ORDER BY curso, posicao
+ORDER BY tb_curso, posicao
 LIMIT 30;
 
 -- ============================================================================
@@ -302,10 +314,10 @@ WITH medias AS (
          pl.ano_periodo_letivo, pl.semestre_periodo_letivo,
          pl.ano_periodo_letivo || '/' || pl.semestre_periodo_letivo       AS periodo,
          round(avg(dm.media_final), 2)       AS media_periodo
-  FROM matricula m
-  JOIN turma t           ON t.id_turma = m.id_turma
-  JOIN periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
-  JOIN v_desempenho_matricula dm ON dm.id_matricula = m.id_matricula        -- [E14]
+  FROM tb_matricula m
+  JOIN tb_turma t           ON t.id_turma = m.id_turma
+  JOIN tb_periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
+  JOIN vw_desempenho_matricula dm ON dm.id_matricula = m.id_matricula        -- [E14]
                                 AND dm.media_final IS NOT NULL
   GROUP BY m.id_aluno, pl.ano_periodo_letivo, pl.semestre_periodo_letivo
 )
@@ -322,8 +334,8 @@ SELECT a.matricula_aluno,                    -- desambigua homônimos (nomes se 
          ELSE '≈ estável'
        END AS tendencia
 FROM medias md
-JOIN aluno a  ON a.id_aluno = md.id_aluno
-JOIN pessoa pe ON pe.id_pessoa = a.id_pessoa                                -- [E2]
+JOIN tb_aluno a  ON a.id_aluno = md.id_aluno
+JOIN tb_pessoa pe ON pe.id_pessoa = a.id_pessoa                                -- [E2]
 WHERE md.id_aluno IN (SELECT id_aluno FROM medias GROUP BY id_aluno HAVING count(*) >= 3)
 WINDOW w AS (PARTITION BY md.id_aluno ORDER BY md.ano_periodo_letivo, md.semestre_periodo_letivo)
 ORDER BY pe.nome_pessoa, a.matricula_aluno, md.ano_periodo_letivo, md.semestre_periodo_letivo
@@ -348,17 +360,17 @@ SELECT (ARRAY['seg','ter','qua','qui','sex','sab','dom'])[h1.dia_semana_turma_ho
        t2.codigo_turma || ' (' || left(lower(h2.faixa_turma_horario)::text, 5) || '–'
                  || left(upper(h2.faixa_turma_horario)::text, 5) || ')' AS turma_b,
        count(DISTINCT m1.id_aluno)                        AS alunos_afetados
-FROM matricula m1
-JOIN matricula m2      ON m2.id_aluno = m1.id_aluno
+FROM tb_matricula m1
+JOIN tb_matricula m2      ON m2.id_aluno = m1.id_aluno
                       AND m2.id_turma > m1.id_turma
                       AND m1.status_matricula = 'confirmada' AND m2.status_matricula = 'confirmada'
-JOIN turma t1          ON t1.id_turma = m1.id_turma
-JOIN turma t2          ON t2.id_turma = m2.id_turma
+JOIN tb_turma t1          ON t1.id_turma = m1.id_turma
+JOIN tb_turma t2          ON t2.id_turma = m2.id_turma
                       AND t2.id_periodo_letivo = t1.id_periodo_letivo
-JOIN periodo_letivo pl ON pl.id_periodo_letivo = t1.id_periodo_letivo
+JOIN tb_periodo_letivo pl ON pl.id_periodo_letivo = t1.id_periodo_letivo
                       AND pl.ano_periodo_letivo = 2026 AND pl.semestre_periodo_letivo = 2
-JOIN turma_horario h1  ON h1.id_turma = t1.id_turma
-JOIN turma_horario h2  ON h2.id_turma = t2.id_turma
+JOIN tb_turma_horario h1  ON h1.id_turma = t1.id_turma
+JOIN tb_turma_horario h2  ON h2.id_turma = t2.id_turma
                       AND h2.dia_semana_turma_horario = h1.dia_semana_turma_horario
                       AND h1.faixa_turma_horario && h2.faixa_turma_horario          -- sobreposição de ranges
 GROUP BY h1.dia_semana_turma_horario, t1.codigo_turma, h1.faixa_turma_horario, t2.codigo_turma, h2.faixa_turma_horario
@@ -376,13 +388,11 @@ ORDER BY alunos_afetados DESC, dia, turma_a;
 \echo '=== C10: disciplinas-gargalo (recursiva + agregação + janela) ==='
 WITH RECURSIVE dependentes AS (
   SELECT p.id_requisito AS base_id, p.id_disciplina AS dependente_id
-  FROM pre_requisito p
-  WHERE p.vinculo_pre_requisito = 'pre_requisito'
+  FROM tb_pre_requisito p
   UNION                                       -- sem ALL: deduplica diamantes
   SELECT dep.base_id, p.id_disciplina
   FROM dependentes dep
-  JOIN pre_requisito p ON p.id_requisito = dep.dependente_id
-                      AND p.vinculo_pre_requisito = 'pre_requisito'
+  JOIN tb_pre_requisito p ON p.id_requisito = dep.dependente_id
 ),
 destravas AS (
   SELECT base_id, count(DISTINCT dependente_id) AS destrava
@@ -394,11 +404,11 @@ reprovacao AS (
          count(*)                                                    AS avaliacoes,
          round(100.0 * count(*) FILTER (WHERE h.situacao_historico IN
                ('reprovado_nota', 'reprovado_frequencia')) / count(*), 1) AS reprovacao_pct
-  FROM turma t
-  JOIN periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
+  FROM tb_turma t
+  JOIN tb_periodo_letivo pl ON pl.id_periodo_letivo = t.id_periodo_letivo
                         AND (pl.ano_periodo_letivo, pl.semestre_periodo_letivo) < (2026, 2)
-  JOIN matricula m       ON m.id_turma = t.id_turma
-  JOIN historico h       ON h.id_matricula = m.id_matricula
+  JOIN tb_matricula m       ON m.id_turma = t.id_turma
+  JOIN tb_historico h       ON h.id_matricula = m.id_matricula
                         AND h.situacao_historico IN ('aprovado', 'reprovado_nota', 'reprovado_frequencia')
   GROUP BY t.id_disciplina
 )
@@ -410,7 +420,7 @@ SELECT d.codigo_disciplina,
        round(coalesce(ds.destrava, 0) * r.reprovacao_pct / 100.0, 2) AS indice_criticidade,
        dense_rank() OVER (ORDER BY coalesce(ds.destrava, 0) * r.reprovacao_pct DESC) AS prioridade
 FROM reprovacao r
-JOIN disciplina d    ON d.id_disciplina = r.id_disciplina
+JOIN tb_disciplina d    ON d.id_disciplina = r.id_disciplina
 LEFT JOIN destravas ds ON ds.base_id = d.id_disciplina
 ORDER BY prioridade, d.codigo_disciplina
 LIMIT 15;
